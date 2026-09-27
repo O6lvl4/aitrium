@@ -9,7 +9,27 @@ onogoro は、エージェントのためにその最初の島を作る。どこ
 （書ける場所、読める場所、通信できる宛先）は、島を作った者が決める。エージェントは島の上で
 働き、鍵は島に持ち込まれない。
 
-**状態：設計段階。** まだ何も動かない。計画は [docs/design.md](docs/design.md) にある。
+**状態：[計画](docs/design.md) のフェーズ 1。** 今ある道具で線を引いた段階。comide が
+実行するコマンドはすべて porta を通り、鍵は中に入らない。例外は golemide で、まだ自分で
+モデルを呼ぶため鍵を名前で渡している（almide/porta#37 で解消する）。
+
+```sh
+onogoro                       # comide の会話。道具のコマンドはすべて縛られる
+onogoro -p "fix the tests"    # 1 回だけの依頼。comide の引数はそのまま使える
+```
+
+comide（`--runner` のある 0.5.0 以降、O6lvl4/comide#2）と porta が `PATH` にあるか、
+`ONOGORO_COMIDE` / `ONOGORO_PORTA` で指定する。`ONOGORO_NET=none` でコマンドの通信を閉じる。
+残りは `onogoro --help` に書いてある。
+
+| comide が実行するもの | 書ける場所 | 通信 | 鍵 |
+|---|---|---|---|
+| `read`（hew、git status） | 作業用のディレクトリ | 無し | 無し |
+| `shell`（モデルが書いたコマンド） | プロジェクト、作業用のディレクトリ | 開いている（`ONOGORO_NET`） | 無し |
+| `solve`（golemide） | プロジェクト、作業用のディレクトリ | 開いている | モデルの鍵を名前で |
+
+どの呼び出しでも、鍵が置かれたファイル（`~/.config/golemide/.env` など）は読めず、
+`TMPDIR` は作業用のディレクトリになり、資格情報の置き場は porta の既定の方針で閉じられる。
 
 ## 何か
 

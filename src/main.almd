@@ -1,0 +1,106 @@
+// onogoro — a world for coding agents: the agent's tools run confined by porta, one call at
+// a time, and the keys stay outside with the agent.
+//
+// One binary, two roles. Run by a person, it is the supervisor: it starts comide with
+// itself as comide's runner (--runner), and comide keeps the keys and the conversation.
+// Run by comide for a tool's command (`onogoro KIND -- PROG ARGS`, with ONOGORO_ROLE set),
+// it is a worker: it runs that command inside porta with the grants policy.almd gives
+// the call, and nothing of the supervisor's environment but what those grants pass.
+
+import env
+import fs
+import process
+import self.policy
+
+let USAGE = """
+onogoro [comide's arguments]      comide, with every tool's command confined by porta
+
+  ONOGORO_COMIDE   the comide binary (default: comide on PATH)
+  ONOGORO_PORTA    the porta binary (default: porta on PATH)
+  ONOGORO_NET      open (default) or none: the network for commands and golemide
+  ONOGORO_KEYS     the variables golemide is given for its own model calls, comma
+                   separated (default: every model key that is set)
+"""
+
+effect fn main() -> Unit = {
+  let args = process.args()
+  let code = if (env.get("ONOGORO_ROLE") ?? "") == "worker" then worker(list.drop(args, 1))!
+    else if list.contains(args, "--help") and list.len(args) == 2 then { println(USAGE); 0 }
+    else supervisor(args)!
+  process.exit(code)
+}
+
+// ---- the supervisor ---------------------------------------------------------------------
+
+effect fn supervisor(args: List[String]) -> Result[Int, String] = {
+  let comide = found(env.get("ONOGORO_COMIDE") ?? "comide")!
+  let porta = found(env.get("ONOGORO_PORTA") ?? "porta")!
+  let me = found(list.first(args) ?? "onogoro")!
+  let root = absolute(option_after(args, "--root") ?? ".")!
+  let scratch = (string.strip_suffix(env.temp_dir(), "/") ?? env.temp_dir()) + "/onogoro-" + int.to_string(process.pid())
+  fs.mkdir_p(scratch)!
+  // What every worker is told. comide passes its environment to the runner it starts;
+  // porta then starts each command from an empty one.
+  env.set("ONOGORO_ROLE", "worker")
+  env.set("ONOGORO_ROOT", root)
+  env.set("ONOGORO_SCRATCH", scratch)
+  env.set("ONOGORO_PORTA_BIN", porta)
+  env.set("COMIDE_RUNNER", me)
+  let code = process.exec_attached(comide, list.drop(args, 1))!
+  let _ = fs.remove_all(scratch)
+  ok(code)
+}
+
+// ---- a worker ---------------------------------------------------------------------------
+
+// `KIND -- PROG ARGS...`, from comide's toolkit.run_in.
+effect fn worker(args: List[String]) -> Result[Int, String] = {
+  let kind = list.get(args, 0) ?? ""
+  if list.get(args, 1) != some("--") or list.len(args) < 3 then err("onogoro worker: expected KIND -- PROG ARGS..., got " + string.join(args, " "))
+  else {
+    let w = world()!
+    let porta = env.get("ONOGORO_PORTA_BIN") ?? "porta"
+    process.exec_attached(porta, policy.invocation(w, kind, list.get(args, 2) ?? "", list.drop(args, 3)))
+  }
+}
+
+effect fn world() -> Result[policy.World, String] = {
+  let home = env.get("HOME") ?? ""
+  let keys = match env.get("ONOGORO_KEYS") {
+    some(k) => list.filter(list.map(string.split(k, ","), string.trim), (x) => x != ""),
+    none => list.filter(policy.MODEL_KEYS, (k) => option.is_some(env.get(k))),
+  }
+  let uid = string.trim(process.exec("id", ["-u"]) ?? "")
+  ok(policy.World {
+    root: env.get("ONOGORO_ROOT") ?? ".",
+    scratch: env.get("ONOGORO_SCRATCH") ?? env.temp_dir(),
+    // The files golemide and comide read keys from, closed to every command.
+    key_files: list.filter([home + "/.config/golemide/.env", home + "/.config/comide/.env"], (f) => fs.exists(f)),
+    keys: keys,
+    as_root: uid == "0",
+    net: env.get("ONOGORO_NET") ?? "open",
+  })
+}
+
+// ---- small things -----------------------------------------------------------------------
+
+// A program's absolute path: as given when it has a slash, else found on PATH.
+effect fn found(prog: String) -> Result[String, String] =
+  if string.contains(prog, "/") then absolute(prog)
+  else match process.exec_status("sh", ["-c", "command -v " + prog]) {
+    ok(st) => if st.code == 0 and string.trim(st.stdout) != "" then ok(string.trim(st.stdout)) else err(prog + " is not on PATH"),
+    err(e) => err(e),
+  }
+
+effect fn absolute(p: String) -> Result[String, String] =
+  if string.starts_with(p, "/") then ok(p)
+  else {
+    let cwd = env.cwd()!
+    ok(if p == "." then cwd else cwd + "/" + (string.strip_prefix(p, "./") ?? p))
+  }
+
+fn option_after(args: List[String], name: String) -> String? =
+  match list.find_index(args, (a) => a == name) {
+    some(i) => list.get(args, i + 1),
+    none => none,
+  }

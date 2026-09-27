@@ -9,7 +9,27 @@ onogoro makes that first island for an agent. The one who makes it decides where
 ends and the sea begins: what may be written, what may be read, which hosts may be reached.
 The agent works on the island. The keys never land there.
 
-**Status: design.** Nothing here runs yet. [docs/design.md](docs/design.md) is the plan.
+**Status: phase 1 of [the plan](docs/design.md).** The line is drawn with the binaries
+that exist: every command comide runs goes through porta, and no key goes in with it
+except to golemide, which still calls the model itself (almide/porta#37 closes that).
+
+```sh
+onogoro                       # comide's conversation, every tool's command confined
+onogoro -p "fix the tests"    # one request; any of comide's arguments work
+```
+
+It needs comide (0.5.0 with `--runner`, O6lvl4/comide#2) and porta on `PATH`, or
+`ONOGORO_COMIDE` / `ONOGORO_PORTA` pointing at them. `ONOGORO_NET=none` closes the network
+to commands; `onogoro --help` says the rest.
+
+| What comide runs | Writes | Network | Keys |
+|---|---|---|---|
+| `read` (hew, git status) | a scratch dir | none | none |
+| `shell` (what the model wrote) | the project, the scratch dir | open (`ONOGORO_NET`) | none |
+| `solve` (golemide) | the project, the scratch dir | open | the model keys, by name |
+
+Every call also has the files the keys live in (`~/.config/golemide/.env`, …) closed to
+reads, `TMPDIR` set to the scratch dir, and credential stores closed by porta's preset.
 
 ## What it is
 

@@ -1,0 +1,63 @@
+// What a worker may do, by what the call is for. comide names each command it runs
+// (toolkit.run_in): `read` looks at the project, `shell` is a command the model wrote,
+// `solve` is golemide, which edits and runs the verify command. Each becomes one
+// `porta run`, and this is where the grants for it are decided.
+//
+// No key goes into a worker except to `solve`, and that one only until porta can hand
+// keys in as placeholders (almide/porta#37): golemide calls the model itself.
+
+// Where the run is: the project, a scratch directory of this session's own, the files
+// the keys are kept in (closed to reads), and whether porta runs as root (a container).
+type World = { root: String, scratch: String, key_files: List[String], keys: List[String], as_root: Bool, net: String }
+
+// The variables golemide reads its models' credentials from.
+let MODEL_KEYS = ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN", "ANTHROPIC_API_KEY", "GEMINI_API_KEY",
+  "GOOGLE_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY"]
+
+// porta's flags for one call, everything between the command and `--`. TMPDIR is the
+// scratch directory: without it a Rust program (golemide, hew) on macOS reaches for its
+// per-user /var/folders directory, which porta closes (almide/porta#38).
+fn grants(w: World, kind: String) -> List[String] =
+  (if w.as_root then ["--allow-root"] else [])
+    + ["-e", "TMPDIR=" + w.scratch]
+    + writes(w, kind)
+    + list.flat_map(w.key_files, (f) => ["--deny-read", f])
+    + network(w, kind)
+    + passed(w, kind)
+
+// Looking writes nothing but its own scratch; a command and golemide write the project.
+fn writes(w: World, kind: String) -> List[String] =
+  if kind == "read" then ["-v", w.scratch] else ["-v", w.root, "-v", w.scratch]
+
+// Looking needs no network. A command gets what the session allows: open by default,
+// because installing a package is ordinary work; `none` closes it.
+fn network(w: World, kind: String) -> List[String] =
+  if kind == "read" or w.net == "none" then ["--no-net"] else []
+
+fn passed(w: World, kind: String) -> List[String] =
+  if kind == "solve" and not list.is_empty(w.keys) then ["--env-pass", string.join(w.keys, ",")] else []
+
+// `porta run PROG GRANTS -- ARGS`: the whole invocation for one call.
+fn invocation(w: World, kind: String, prog: String, args: List[String]) -> List[String] =
+  ["run", prog] + grants(w, kind) + ["--"] + args
+
+test "looking writes nothing, and reaches nothing" {
+  let w = World { root: "/w/p", scratch: "/tmp/s", key_files: ["/h/.config/golemide/.env"], keys: ["CLOUDFLARE_API_TOKEN"], as_root: false, net: "open" }
+  assert_eq(invocation(w, "read", "hew", ["tree", "/w/p"]),
+    ["run", "hew", "-e", "TMPDIR=/tmp/s", "-v", "/tmp/s", "--deny-read", "/h/.config/golemide/.env", "--no-net", "--", "tree", "/w/p"])
+}
+
+test "a command writes the project, and no key goes in with it" {
+  let w = World { root: "/w/p", scratch: "/tmp/s", key_files: [], keys: ["CLOUDFLARE_API_TOKEN"], as_root: true, net: "open" }
+  let g = grants(w, "shell")
+  assert_eq(g, ["--allow-root", "-e", "TMPDIR=/tmp/s", "-v", "/w/p", "-v", "/tmp/s"])
+  assert(not list.contains(g, "--env-pass"))
+  assert(list.contains(grants({ ...w, net: "none" }, "shell"), "--no-net"))
+}
+
+test "golemide alone is given the model keys, by name" {
+  let w = World { root: "/w/p", scratch: "/tmp/s", key_files: [], keys: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"], as_root: false, net: "open" }
+  assert_eq(passed(w, "solve"), ["--env-pass", "CLOUDFLARE_ACCOUNT_ID,CLOUDFLARE_API_TOKEN"])
+  assert_eq(passed(w, "shell"), ([]: List[String]))
+  assert_eq(passed({ ...w, keys: ([]: List[String]) }, "solve"), ([]: List[String]))
+}
