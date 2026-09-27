@@ -104,8 +104,8 @@ and, from phase 3, porta's containment suite.
   from source until then)
 - almide/porta#36: porta says so when a mount cannot be written under Landlock (Docker
   Desktop shares)
-- porta: a credential broker in the proxy (phase 2), to be filed
-- comide: a `runner` seam in `toolkit.Setup` (phase 1), to be filed
+- almide/porta#37: a credential broker in the proxy (phase 2)
+- O6lvl4/comide#2: a `runner` seam in `toolkit.Setup` (phase 1)
 - O6lvl4/comide#1: a reply cut off before any text ends the turn. This is not onogoro's
   bug, but it caps what the measurements can show.
 
