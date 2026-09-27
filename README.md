@@ -59,6 +59,20 @@ every command the model asks for can read that key. onogoro draws the line at th
 call instead. The agent's loop stays outside with the keys. What the model asks to run
 goes inside, one call at a time, and sees a placeholder where the key would be.
 
+## On ConoHa
+
+Agents that work around the clock live well on a flat-priced VPS, but an agent that can
+make servers can make a hundred. `onogoro harbor` is the door between them and ConoHa. It
+holds the ConoHa API user, which the agents never see, and makes servers only inside the
+plans, count and yen-a-month the person set. Each refusal comes back to the model with the
+setting that would allow it. `deploy/conoha/` sets up one VPS with the harbor and four AI
+staff on timers. [docs/conoha.md](docs/conoha.md) has the rest.
+
+```sh
+ONOGORO_HARBOR_DRY=1 ONOGORO_HARBOR_TOKEN=$(openssl rand -hex 24) \
+ONOGORO_HARBOR_PLANS=g2l-t-c2m1=1064 ONOGORO_HARBOR_YEN_MONTH=3000 onogoro harbor
+```
+
 ## Why another one
 
 Cloudflare OS, OpenShell and nono already keep keys away from agents. onogoro's

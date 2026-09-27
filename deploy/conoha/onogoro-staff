@@ -1,0 +1,41 @@
+#!/bin/bash
+# onogoro-staff enable | disable | status: the harbor, and one timer per role in
+# /etc/onogoro/staff, on the role's SCHEDULE.
+set -euo pipefail
+conf=/etc/onogoro/staff
+roles() { for f in "$conf"/*.env; do basename "$f" .env; done; }
+
+case "${1:-status}" in
+  enable)
+    systemctl enable --now onogoro-harbor.service
+    for role in $(roles); do
+      SCHEDULE=$(. "$conf/$role.env"; echo "${SCHEDULE:-}")
+      [ -n "$SCHEDULE" ] || continue
+      cat >"/etc/systemd/system/onogoro-shift@$role.timer" <<UNIT
+[Unit]
+Description=onogoro: the $role role's shifts
+
+[Timer]
+OnCalendar=$SCHEDULE
+Persistent=true
+Unit=onogoro-shift@$role.service
+
+[Install]
+WantedBy=timers.target
+UNIT
+    done
+    systemctl daemon-reload
+    for role in $(roles); do
+      [ -e "/etc/systemd/system/onogoro-shift@$role.timer" ] && systemctl enable --now "onogoro-shift@$role.timer"
+    done
+    ;;
+  disable)
+    for role in $(roles); do systemctl disable --now "onogoro-shift@$role.timer" 2>/dev/null || true; done
+    systemctl disable --now onogoro-harbor.service
+    ;;
+  status)
+    systemctl --no-pager list-timers 'onogoro-shift@*'
+    systemctl --no-pager --lines=0 status onogoro-harbor.service || true
+    ;;
+  *) echo "onogoro-staff enable | disable | status" >&2; exit 2 ;;
+esac

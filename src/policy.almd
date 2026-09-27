@@ -7,8 +7,12 @@
 // keys in as placeholders (almide/porta#37): golemide calls the model itself.
 
 // Where the run is: the project, a scratch directory of this session's own, the files
-// the keys are kept in (closed to reads), and whether porta runs as root (a container).
-type World = { root: String, scratch: String, key_files: List[String], keys: List[String], as_root: Bool, net: String }
+// the keys are kept in (closed to reads), whether porta runs as root (a container), and
+// the harbor, when there is one: the local door through which an agent asks for servers
+// (harbor.almd). Its port and token are all a command gets of it; the cloud's own
+// credentials stay with the harbor.
+type World = { root: String, scratch: String, key_files: List[String], keys: List[String], as_root: Bool, net: String,
+  harbor_port: Int, harbor_token: String }
 
 // The variables golemide reads its models' credentials from.
 let MODEL_KEYS = ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN", "ANTHROPIC_API_KEY", "GEMINI_API_KEY",
@@ -24,6 +28,7 @@ fn grants(w: World, kind: String) -> List[String] =
     + list.flat_map(w.key_files, (f) => ["--deny-read", f])
     + network(w, kind)
     + passed(w, kind)
+    + harbor(w, kind)
 
 // Looking writes nothing but its own scratch; a command and golemide write the project.
 fn writes(w: World, kind: String) -> List[String] =
@@ -31,8 +36,17 @@ fn writes(w: World, kind: String) -> List[String] =
 
 // Looking needs no network. A command gets what the session allows: open by default,
 // because installing a package is ordinary work; `none` closes it.
+// With the network closed, a command can still reach the harbor, and nothing else: the
+// harbor's port on this machine is the one port opened.
 fn network(w: World, kind: String) -> List[String] =
-  if kind == "read" or w.net == "none" then ["--no-net"] else []
+  if kind == "read" then ["--no-net"]
+  else if w.net == "none" then (if w.harbor_port > 0 then ["--allow-net", "127.0.0.1:" + int.to_string(w.harbor_port)] else ["--no-net"])
+  else []
+
+// Where the harbor is, for the commands that may ask it for something. Looking may not.
+fn harbor(w: World, kind: String) -> List[String] =
+  if kind == "read" or w.harbor_port <= 0 then []
+  else ["-e", "ONOGORO_HARBOR=http://127.0.0.1:" + int.to_string(w.harbor_port), "-e", "ONOGORO_HARBOR_TOKEN=" + w.harbor_token]
 
 fn passed(w: World, kind: String) -> List[String] =
   if kind == "solve" and not list.is_empty(w.keys) then ["--env-pass", string.join(w.keys, ",")] else []
@@ -42,13 +56,13 @@ fn invocation(w: World, kind: String, prog: String, args: List[String]) -> List[
   ["run", prog] + grants(w, kind) + ["--"] + args
 
 test "looking writes nothing, and reaches nothing" {
-  let w = World { root: "/w/p", scratch: "/tmp/s", key_files: ["/h/.config/golemide/.env"], keys: ["CLOUDFLARE_API_TOKEN"], as_root: false, net: "open" }
+  let w = World { root: "/w/p", scratch: "/tmp/s", key_files: ["/h/.config/golemide/.env"], keys: ["CLOUDFLARE_API_TOKEN"], as_root: false, net: "open", harbor_port: 0, harbor_token: "" }
   assert_eq(invocation(w, "read", "hew", ["tree", "/w/p"]),
     ["run", "hew", "-e", "TMPDIR=/tmp/s", "-v", "/tmp/s", "--deny-read", "/h/.config/golemide/.env", "--no-net", "--", "tree", "/w/p"])
 }
 
 test "a command writes the project, and no key goes in with it" {
-  let w = World { root: "/w/p", scratch: "/tmp/s", key_files: [], keys: ["CLOUDFLARE_API_TOKEN"], as_root: true, net: "open" }
+  let w = World { root: "/w/p", scratch: "/tmp/s", key_files: [], keys: ["CLOUDFLARE_API_TOKEN"], as_root: true, net: "open", harbor_port: 0, harbor_token: "" }
   let g = grants(w, "shell")
   assert_eq(g, ["--allow-root", "-e", "TMPDIR=/tmp/s", "-v", "/w/p", "-v", "/tmp/s"])
   assert(not list.contains(g, "--env-pass"))
@@ -56,8 +70,19 @@ test "a command writes the project, and no key goes in with it" {
 }
 
 test "golemide alone is given the model keys, by name" {
-  let w = World { root: "/w/p", scratch: "/tmp/s", key_files: [], keys: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"], as_root: false, net: "open" }
+  let w = World { root: "/w/p", scratch: "/tmp/s", key_files: [], keys: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"], as_root: false, net: "open", harbor_port: 0, harbor_token: "" }
   assert_eq(passed(w, "solve"), ["--env-pass", "CLOUDFLARE_ACCOUNT_ID,CLOUDFLARE_API_TOKEN"])
   assert_eq(passed(w, "shell"), ([]: List[String]))
   assert_eq(passed({ ...w, keys: ([]: List[String]) }, "solve"), ([]: List[String]))
+}
+
+test "a command finds the harbor, and with the network closed reaches only it" {
+  let w = World { root: "/w/p", scratch: "/tmp/s", key_files: [], keys: [], as_root: false, net: "none", harbor_port: 7707, harbor_token: "t0k" }
+  let g = grants(w, "shell")
+  assert(list.contains(g, "ONOGORO_HARBOR=http://127.0.0.1:7707"))
+  assert(list.contains(g, "ONOGORO_HARBOR_TOKEN=t0k"))
+  assert_eq(network(w, "shell"), ["--allow-net", "127.0.0.1:7707"])
+  assert_eq(network({ ...w, net: "open" }, "shell"), ([]: List[String]))
+  assert_eq(network(w, "read"), ["--no-net"])
+  assert_eq(harbor(w, "read"), ([]: List[String]))
 }

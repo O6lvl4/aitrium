@@ -1,0 +1,11 @@
+[Unit]
+Description=onogoro: one shift of the %i role
+After=network-online.target onogoro-harbor.service
+
+[Service]
+Type=oneshot
+User=staff
+EnvironmentFile=/etc/onogoro/keys.env
+ExecStart=/usr/local/bin/onogoro-shift %i
+# A shift that runs away is stopped; the harbor stops what it asks for.
+TimeoutStartSec=2h

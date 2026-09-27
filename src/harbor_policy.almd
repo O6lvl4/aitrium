@@ -1,0 +1,135 @@
+// What an agent may ask the harbor to do with servers. The harbor holds the cloud's API
+// credentials; an agent holds only the harbor's token, and every ask is decided here
+// against limits the person set: which plans, how many servers, how many yen a month.
+//
+// An agent that can make servers can make a hundred of them. The harbor is where that
+// stops: it counts what the agent already has, prices what it asks for, and refuses
+// what would go over. A refusal says what was refused and the limit that would allow
+// it, so the model can take another path or ask the person to raise it.
+
+// A plan the harbor may make a server from, and what it costs a month at most, in yen
+// with tax (ConoHa's hourly billing stops at the monthly price).
+type Plan = { flavor: String, yen_month: Int }
+
+// What the person allows. `stopped_billed`: a stopped server still costs money, so it
+// still counts against the budget (true on ConoHa VPS).
+type Limits = { plans: List[Plan], max_servers: Int, yen_month: Int, stopped_billed: Bool, prefix: String }
+
+// A server the harbor made. The harbor never touches one it did not make.
+type Owned = { id: String, name: String, flavor: String, status: String }
+
+type Ask = | Create{name: String, flavor: String} | Delete{id: String} | Stop{id: String} | Start{id: String}
+
+// `grant` is what the person would change to allow it, "" when nothing would.
+type Verdict = | Allow | Refuse{why: String, grant: String}
+
+fn plan_of(l: Limits, flavor: String) -> Plan? = list.find(l.plans, (p) => p.flavor == flavor)
+
+// What the harbor's servers cost a month now, by the budget's rules.
+fn spending(l: Limits, owned: List[Owned]) -> Int =
+  list.fold(owned, 0, (sum, o) =>
+    if o.status == "SHUTOFF" and not l.stopped_billed then sum
+    else sum + ((plan_of(l, o.flavor) ?? Plan { flavor: o.flavor, yen_month: 0 }).yen_month))
+
+fn owns(owned: List[Owned], id: String) -> Owned? = list.find(owned, (o) => o.id == id)
+
+fn decide(l: Limits, owned: List[Owned], ask: Ask) -> Verdict = match ask {
+  Create { name, flavor } => create(l, owned, name, flavor),
+  Delete { id } => mine(owned, id, "delete"),
+  Stop { id } => mine(owned, id, "stop"),
+  Start { id } => match owns(owned, id) {
+    none => not_mine(id, "start"),
+    // Starting a stopped server costs nothing more when stopped ones are billed anyway.
+    some(o) => if l.stopped_billed then Allow else within(l, owned, o.flavor, "start " + o.name),
+  },
+}
+
+fn create(l: Limits, owned: List[Owned], name: String, flavor: String) -> Verdict =
+  if not string.starts_with(name, l.prefix) then
+    Refuse { why: "a server's name must start with " + l.prefix + ", so the person can tell the agent's servers from their own", grant: "" }
+  else if list.any(owned, (o) => o.name == name) then Refuse { why: "there is already a server named " + name, grant: "" }
+  else match plan_of(l, flavor) {
+    none => Refuse {
+      why: "the plan " + flavor + " is not one the agent may use; it may use " + string.join(list.map(l.plans, (p) => p.flavor), ", "),
+      grant: "ONOGORO_HARBOR_PLANS=" + string.join(list.map(l.plans, (p) => p.flavor) + [flavor], ","),
+    },
+    some(_) =>
+      if list.len(owned) >= l.max_servers then Refuse {
+        why: "the agent already has " + int.to_string(list.len(owned)) + " servers, the most it may have",
+        grant: "ONOGORO_HARBOR_MAX_SERVERS=" + int.to_string(list.len(owned) + 1),
+      }
+      else within(l, owned, flavor, "create " + name),
+  }
+
+// Allowed when the month's spending stays inside the budget with this plan added.
+fn within(l: Limits, owned: List[Owned], flavor: String, what: String) -> Verdict = {
+  let now = spending(l, owned)
+  let more = (plan_of(l, flavor) ?? Plan { flavor: flavor, yen_month: 0 }).yen_month
+  if now + more <= l.yen_month then Allow
+  else Refuse {
+    why: what + " would make the month " + yen(now + more) + ", over the budget of " + yen(l.yen_month) + " (" + yen(now) + " now)",
+    grant: "ONOGORO_HARBOR_YEN_MONTH=" + int.to_string(now + more),
+  }
+}
+
+fn mine(owned: List[Owned], id: String, what: String) -> Verdict =
+  if option.is_some(owns(owned, id)) then Allow else not_mine(id, what)
+
+fn not_mine(id: String, what: String) -> Verdict =
+  Refuse { why: "the agent may " + what + " only servers it made through the harbor; " + id + " is not one of them", grant: "" }
+
+fn yen(n: Int) -> String = int.to_string(n) + " yen"
+
+// ---- tests ------------------------------------------------------------------------------
+
+fn limits() -> Limits = Limits {
+  plans: [Plan { flavor: "g2l-t-c2m1", yen_month: 1064 }, Plan { flavor: "g2l-t-c4m4", yen_month: 3969 }],
+  max_servers: 2, yen_month: 6000, stopped_billed: true, prefix: "staff-",
+}
+
+test "a plan inside the limits is made" {
+  assert_eq(decide(limits(), [], Create { name: "staff-research", flavor: "g2l-t-c4m4" }), Allow)
+}
+
+test "a plan the person did not allow is refused, with the setting that would allow it" {
+  match decide(limits(), [], Create { name: "staff-gpu", flavor: "g2l-p-l4" }) {
+    Refuse { why, grant } => {
+      assert(string.contains(why, "g2l-t-c2m1, g2l-t-c4m4"))
+      assert_eq(grant, "ONOGORO_HARBOR_PLANS=g2l-t-c2m1,g2l-t-c4m4,g2l-p-l4")
+    },
+    Allow => assert(false),
+  }
+}
+
+test "the count stops a runaway before the budget does" {
+  let two = [Owned { id: "a", name: "staff-a", flavor: "g2l-t-c2m1", status: "ACTIVE" },
+    Owned { id: "b", name: "staff-b", flavor: "g2l-t-c2m1", status: "ACTIVE" }]
+  match decide(limits(), two, Create { name: "staff-c", flavor: "g2l-t-c2m1" }) {
+    Refuse { grant, .. } => assert_eq(grant, "ONOGORO_HARBOR_MAX_SERVERS=3"),
+    Allow => assert(false),
+  }
+}
+
+test "the budget counts stopped servers when stopping does not stop the bill" {
+  let one = [Owned { id: "a", name: "staff-a", flavor: "g2l-t-c4m4", status: "SHUTOFF" }]
+  match decide(limits(), one, Create { name: "staff-b", flavor: "g2l-t-c4m4" }) {
+    Refuse { why, grant } => {
+      assert(string.contains(why, "7938 yen"))
+      assert_eq(grant, "ONOGORO_HARBOR_YEN_MONTH=7938")
+    },
+    Allow => assert(false),
+  }
+  let free_when_stopped = { ...limits(), stopped_billed: false }
+  assert_eq(decide(free_when_stopped, one, Create { name: "staff-b", flavor: "g2l-t-c4m4" }), Allow)
+  let two = one + [Owned { id: "b", name: "staff-b", flavor: "g2l-t-c4m4", status: "ACTIVE" }]
+  assert(decide(free_when_stopped, two, Start { id: "a" }) != Allow)
+}
+
+test "the harbor touches only the servers it made, and only by its prefix" {
+  let one = [Owned { id: "a", name: "staff-a", flavor: "g2l-t-c2m1", status: "ACTIVE" }]
+  assert_eq(decide(limits(), one, Delete { id: "a" }), Allow)
+  assert_eq(decide(limits(), one, Stop { id: "a" }), Allow)
+  assert(decide(limits(), one, Delete { id: "the-company-db" }) != Allow)
+  assert(decide(limits(), one, Create { name: "db-2", flavor: "g2l-t-c2m1" }) != Allow)
+  assert(decide(limits(), one, Create { name: "staff-a", flavor: "g2l-t-c2m1" }) != Allow)
+}

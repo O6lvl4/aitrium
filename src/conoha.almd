@@ -1,0 +1,169 @@
+// ConoHa VPS (Ver.3.0), the few calls the harbor makes: a token, the plans, a server made
+// from a boot volume, stop, start, delete. The same OpenStack paths GMO's own MCP server
+// (gmo-internet/conoha_vps_mcp) uses; the difference is who may call them. Only the
+// harbor holds these credentials, and it calls only what harbor_policy.almd allowed.
+//
+// With `dry` set, nothing reaches ConoHa: servers are kept in the harbor's own state and
+// made, stopped and deleted there. That is how the harbor is tried without an account.
+
+import base64
+import bytes
+import env
+import http
+import json
+import process
+import value
+
+// The account and what every server the harbor makes is made from. The names are the
+// official MCP server's: OPENSTACK_TENANT_ID, OPENSTACK_USER_ID, OPENSTACK_PASSWORD.
+type Cloud = { region: String, tenant: String, user: String, password: String, image: String, volume_type: String,
+  volume_gb: Int, key_name: String, security_group: String, dry: Bool }
+
+fn identity(c: Cloud) -> String = "https://identity." + c.region + ".conoha.io/v3"
+fn compute(c: Cloud) -> String = "https://compute." + c.region + ".conoha.io/v2.1"
+fn storage(c: Cloud) -> String = "https://block-storage." + c.region + ".conoha.io/v3/" + c.tenant
+
+// ---- request bodies (pure) --------------------------------------------------------------
+
+fn auth_body(c: Cloud) -> String = json.stringify(value.object([("auth", value.object([
+  ("identity", value.object([("methods", value.array([value.str("password")])),
+    ("password", value.object([("user", value.object([("id", value.str(c.user)), ("password", value.str(c.password))]))]))])),
+  ("scope", value.object([("project", value.object([("id", value.str(c.tenant))]))])),
+]))]))
+
+fn volume_body(c: Cloud, name: String) -> String = json.stringify(value.object([("volume", value.object([
+  ("size", value.int(c.volume_gb)), ("name", value.str(name + "-boot")), ("volume_type", value.str(c.volume_type)),
+  ("imageRef", value.str(c.image)),
+]))]))
+
+// `user_data` is the startup script, base64 as ConoHa wants it; "" leaves it out.
+fn server_body(c: Cloud, name: String, flavor_id: String, volume: String, admin_pass: String, startup: String) -> String = {
+  let base = [("flavorRef", value.str(flavor_id)), ("adminPass", value.str(admin_pass)),
+    ("block_device_mapping_v2", value.array([value.object([("uuid", value.str(volume))])])),
+    ("metadata", value.object([("instance_name_tag", value.str(name))]))]
+  let group = if c.security_group == "" then [] else [("security_groups", value.array([value.object([("name", value.str(c.security_group))])]))]
+  let key = if c.key_name == "" then [] else [("key_name", value.str(c.key_name))]
+  let script = if startup == "" then [] else [("user_data", value.str(base64.encode(bytes.from_string(startup))))]
+  json.stringify(value.object([("server", value.object(base + group + key + script))]))
+}
+
+fn action_body(action: String) -> String = json.stringify(value.object([(action, value.null())]))
+
+// ---- calls ------------------------------------------------------------------------------
+
+fn headers(token: String) -> Map[String, String] =
+  map.from_list([("Accept", "application/json"), ("Content-Type", "application/json"), ("X-Auth-Token", token)])
+
+effect fn call(token: String, method: String, url: String, body: String) -> Result[Value, String] = {
+  let resp = http.request_response(method, url, body, headers(token))!
+  let code = http.status_code(resp)
+  let text = http.body(resp)
+  if code >= 300 then err(method + " " + url + ": " + int.to_string(code) + " " + string.take(text, 400))
+  else if string.trim(text) == "" then ok(value.null())
+  else json.parse(text)
+}
+
+effect fn token(c: Cloud) -> Result[String, String] =
+  if c.dry then ok("dry")
+  else {
+    let resp = http.request_response("POST", identity(c) + "/auth/tokens", auth_body(c),
+      map.from_list([("Accept", "application/json"), ("Content-Type", "application/json")]))!
+    match http.get_header(resp, "X-Subject-Token") {
+      some(t) => ok(t),
+      none => err("ConoHa refused the API user: " + int.to_string(http.status_code(resp)) + " " + string.take(http.body(resp), 200)),
+    }
+  }
+
+fn at(v: Value, path: List[String]) -> Value? =
+  list.fold(path, some(v), (cur, k) => match cur { some(x) => result.to_option(value.field(x, k)), none => none })
+
+fn text_at(v: Value, path: List[String]) -> String = match at(v, path) {
+  some(x) => value.as_string(x) ?? "",
+  none => "",
+}
+
+effect fn flavor_id(c: Cloud, tok: String, name: String) -> Result[String, String] = {
+  let v = call(tok, "GET", compute(c) + "/flavors", "")!
+  let found = list.find((json.get_array(v, "flavors") ?? []), (f) => json.get_string(f, "name") == some(name))
+  match found {
+    some(f) => ok(json.get_string(f, "id") ?? ""),
+    none => err("ConoHa has no plan named " + name),
+  }
+}
+
+// Waits, two minutes at most, for a volume to reach `status` or to be gone.
+effect fn settle(c: Cloud, tok: String, volume: String, status: String) -> Result[Unit, String] = {
+  var tries = 0
+  var done = false
+  while not done and tries < 60 {
+    let resp = http.request_response("GET", storage(c) + "/volumes/" + volume, "", headers(tok))!
+    let now = if http.status_code(resp) == 404 then "" else match json.parse(http.body(resp)) {
+      ok(v) => text_at(v, ["volume", "status"]),
+      err(_) => "?",
+    }
+    if now == status or now == "" or now == "error" then done = true
+    else { env.sleep_ms(2000); tries = tries + 1 }
+  }
+  if done then ok(()) else err("the volume " + volume + " did not become " + status + " in two minutes")
+}
+
+// A server from a fresh boot volume. Returns the server's id and the volume's.
+effect fn create(c: Cloud, tok: String, name: String, flavor: String, startup: String) -> Result[(String, String), String] =
+  if c.dry then ok(("dry-" + name, "dry-" + name + "-boot"))
+  else {
+    let fid = flavor_id(c, tok, flavor)!
+    let vol = call(tok, "POST", storage(c) + "/volumes", volume_body(c, name))!
+    let volume = text_at(vol, ["volume", "id"])
+    settle(c, tok, volume, "available")!
+    let made = call(tok, "POST", compute(c) + "/servers", server_body(c, name, fid, volume, admin_pass()!, startup))!
+    ok((text_at(made, ["server", "id"]), volume))
+  }
+
+// A root password nobody needs to know: the way in is the SSH key (ONOGORO_HARBOR_KEY_NAME).
+// ConoHa wants upper and lower case, a digit and a symbol.
+effect fn admin_pass() -> Result[String, String] = {
+  let r = string.trim(process.exec("openssl", ["rand", "-hex", "16"])!)
+  ok("Ah1-" + r)
+}
+
+// The status ConoHa reports for each of these servers: ACTIVE, SHUTOFF, BUILD, ... and
+// "GONE" for one that no longer exists.
+effect fn statuses(c: Cloud, tok: String, ids: List[String]) -> Result[Map[String, String], String] = {
+  let v = call(tok, "GET", compute(c) + "/servers/detail", "")!
+  let seen = list.map(json.get_array(v, "servers") ?? [], (s) => (json.get_string(s, "id") ?? "", json.get_string(s, "status") ?? ""))
+  ok(map.from_list(list.map(ids, (id) => (id, match list.find(seen, (p) => p.0 == id) { some(p) => p.1, none => "GONE" }))))
+}
+
+effect fn act(c: Cloud, tok: String, id: String, action: String) -> Result[Unit, String] =
+  if c.dry then ok(())
+  else { call(tok, "POST", compute(c) + "/servers/" + id + "/action", action_body(action))!; ok(()) }
+
+// The server, then its boot volume, which ConoHa would otherwise keep, and bill.
+effect fn delete(c: Cloud, tok: String, id: String, volume: String) -> Result[Unit, String] =
+  if c.dry then ok(())
+  else {
+    call(tok, "DELETE", compute(c) + "/servers/" + id, "")!
+    if volume == "" then ok(())
+    else {
+      settle(c, tok, volume, "available")!
+      let resp = http.request_response("DELETE", storage(c) + "/volumes/" + volume, "", headers(tok))!
+      if http.status_code(resp) < 300 or http.status_code(resp) == 404 then ok(())
+      else err("the server is deleted, but its boot volume " + volume + " is not: " + int.to_string(http.status_code(resp)))
+    }
+  }
+
+test "a server is made from its boot volume, with the startup script in base64" {
+  let c = Cloud { region: "c3j1", tenant: "t", user: "u", password: "p", image: "img", volume_type: "c3j1-ds02-boot",
+    volume_gb: 100, key_name: "me", security_group: "", dry: false }
+  let body = json.parse(server_body(c, "staff-a", "f1", "v1", "Ah1-x", "#!/bin/sh\necho hi\n")) ?? value.null()
+  assert_eq(text_at(body, ["server", "flavorRef"]), "f1")
+  assert_eq(text_at(body, ["server", "key_name"]), "me")
+  assert_eq(text_at(body, ["server", "user_data"]), "IyEvYmluL3NoCmVjaG8gaGkK")
+  assert_eq(text_at(body, ["server", "metadata", "instance_name_tag"]), "staff-a")
+  assert(option.is_none(at(body, ["server", "security_groups"])))
+  let vol = json.parse(volume_body(c, "staff-a")) ?? value.null()
+  assert_eq(text_at(vol, ["volume", "name"]), "staff-a-boot")
+  assert_eq(text_at(vol, ["volume", "imageRef"]), "img")
+  assert_eq(action_body("os-stop"), "{\"os-stop\":null}")
+  assert_eq(compute(c), "https://compute.c3j1.conoha.io/v2.1")
+}

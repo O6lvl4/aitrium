@@ -1,0 +1,226 @@
+// The harbor: the one door on this machine through which an agent can ask for servers.
+// It holds the cloud's credentials, and the agents do not; they hold its token, which
+// buys only what harbor_policy.almd allows. Every ask and every answer goes to an audit
+// log, and a refusal comes back as an answer the model can read: what was refused, and
+// the setting the person would change to allow it.
+//
+//   GET    /                     what the agent may do, and what it has now
+//   GET    /servers              the servers it made
+//   POST   /servers              {"name": "staff-x", "plan": "g2l-t-c2m1", "startup": "#!/bin/sh ..."}
+//   POST   /servers/ID/stop      stop (on ConoHa a stopped server is still billed)
+//   POST   /servers/ID/start
+//   DELETE /servers/ID           the server and its boot volume
+//
+// Requests are answered one at a time, so two asks cannot both fit the same budget.
+
+import env
+import fs
+import http
+import json
+import value
+import self.conoha
+import self.harbor_policy as policy
+
+type Kept = { id: String, name: String, flavor: String, volume: String, status: String }
+
+type Harbor = { port: Int, token: String, state: String, limits: policy.Limits, cloud: conoha.Cloud }
+
+let USAGE = """
+onogoro harbor        a door to ConoHa for agents: servers inside the limits set here
+
+  ONOGORO_HARBOR_TOKEN           what an agent must show (required)
+  ONOGORO_HARBOR_PORT            default 7707
+  ONOGORO_HARBOR_STATE           the harbor's own directory (default /var/lib/onogoro-harbor)
+  ONOGORO_HARBOR_PLANS           plan=yen a month, comma separated: g2l-t-c2m1=1064,g2l-t-c4m4=3969
+  ONOGORO_HARBOR_MAX_SERVERS     default 1
+  ONOGORO_HARBOR_YEN_MONTH       the month's budget for the harbor's servers (default 0)
+  ONOGORO_HARBOR_PREFIX          every name starts with it (default staff-)
+  ONOGORO_HARBOR_STOPPED_BILLED  true (default, as on ConoHa VPS) or false
+  ONOGORO_HARBOR_DRY             1: keep the servers in the state file, call no one
+
+  OPENSTACK_TENANT_ID, OPENSTACK_USER_ID, OPENSTACK_PASSWORD   the ConoHa API user
+  CONOHA_REGION (c3j1), ONOGORO_HARBOR_IMAGE, ONOGORO_HARBOR_VOLUME_TYPE,
+  ONOGORO_HARBOR_VOLUME_GB (100), ONOGORO_HARBOR_KEY_NAME, ONOGORO_HARBOR_SECURITY_GROUP
+"""
+
+// ---- settings ---------------------------------------------------------------------------
+
+fn plans(text: String) -> List[policy.Plan] =
+  list.filter_map(string.split(text, ","), (item) => match string.split_once(string.trim(item), "=") {
+    some((flavor, yen)) => match int.parse(string.trim(yen)) {
+      ok(n) => some(policy.Plan { flavor: string.trim(flavor), yen_month: n }),
+      err(_) => none,
+    },
+    none => none,
+  })
+
+effect fn configured() -> Result[Harbor, String] = {
+  let token = (env.get("ONOGORO_HARBOR_TOKEN") ?? "")
+  if string.len(token) < 16 then err("ONOGORO_HARBOR_TOKEN is not set, or shorter than 16 characters\n" + USAGE)
+  else {
+    let dry = (env.get("ONOGORO_HARBOR_DRY") ?? "") == "1"
+    let cloud = conoha.Cloud {
+      region: (env.get("CONOHA_REGION") ?? "c3j1"), tenant: (env.get("OPENSTACK_TENANT_ID") ?? ""), user: (env.get("OPENSTACK_USER_ID") ?? ""),
+      password: (env.get("OPENSTACK_PASSWORD") ?? ""), image: (env.get("ONOGORO_HARBOR_IMAGE") ?? ""),
+      volume_type: (env.get("ONOGORO_HARBOR_VOLUME_TYPE") ?? ""), volume_gb: (int.parse(env.get("ONOGORO_HARBOR_VOLUME_GB") ?? "") ?? 100),
+      key_name: (env.get("ONOGORO_HARBOR_KEY_NAME") ?? ""), security_group: (env.get("ONOGORO_HARBOR_SECURITY_GROUP") ?? ""), dry: dry,
+    }
+    let missing = list.filter([("OPENSTACK_TENANT_ID", cloud.tenant), ("OPENSTACK_USER_ID", cloud.user), ("OPENSTACK_PASSWORD", cloud.password),
+      ("ONOGORO_HARBOR_IMAGE", cloud.image), ("ONOGORO_HARBOR_VOLUME_TYPE", cloud.volume_type)], (p) => p.1 == "")
+    if not dry and not list.is_empty(missing) then err("not set: " + string.join(list.map(missing, (p) => p.0), ", ") + "\n" + USAGE)
+    else ok(Harbor {
+      port: (int.parse(env.get("ONOGORO_HARBOR_PORT") ?? "") ?? 7707), token: token, state: (env.get("ONOGORO_HARBOR_STATE") ?? "/var/lib/onogoro-harbor"),
+      limits: policy.Limits {
+        plans: plans((env.get("ONOGORO_HARBOR_PLANS") ?? "")), max_servers: (int.parse(env.get("ONOGORO_HARBOR_MAX_SERVERS") ?? "") ?? 1),
+        yen_month: (int.parse(env.get("ONOGORO_HARBOR_YEN_MONTH") ?? "") ?? 0), stopped_billed: (env.get("ONOGORO_HARBOR_STOPPED_BILLED") ?? "true") != "false",
+        prefix: (env.get("ONOGORO_HARBOR_PREFIX") ?? "staff-"),
+      },
+      cloud: cloud,
+    })
+  }
+}
+
+// ---- the servers it made ----------------------------------------------------------------
+
+fn kept_json(k: Kept) -> Value = value.object([("id", value.str(k.id)), ("name", value.str(k.name)), ("plan", value.str(k.flavor)),
+  ("volume", value.str(k.volume)), ("status", value.str(k.status))])
+
+fn kept_of(v: Value) -> Kept = Kept {
+  id: json.get_string(v, "id") ?? "", name: json.get_string(v, "name") ?? "", flavor: json.get_string(v, "plan") ?? "",
+  volume: json.get_string(v, "volume") ?? "", status: json.get_string(v, "status") ?? "",
+}
+
+effect fn load(h: Harbor) -> Result[List[Kept], String] = match fs.read_text_if_exists(h.state + "/servers.json")! {
+  some(text) => ok(list.map(json.get_array(json.parse(text)!, "servers") ?? [], kept_of)),
+  none => ok([]),
+}
+
+effect fn save(h: Harbor, kept: List[Kept]) -> Result[Unit, String] = {
+  let tmp = h.state + "/servers.json.tmp"
+  fs.write(tmp, json.stringify_pretty(value.object([("servers", value.array(list.map(kept, kept_json)))])))!
+  fs.rename(tmp, h.state + "/servers.json")
+}
+
+// What it made, with the status ConoHa reports now; a server gone from ConoHa is dropped.
+effect fn current(h: Harbor, tok: String) -> Result[List[Kept], String] = {
+  let kept = load(h)!
+  if h.cloud.dry or list.is_empty(kept) then ok(kept)
+  else {
+    let now = conoha.statuses(h.cloud, tok, list.map(kept, (k) => k.id))!
+    let fresh = list.filter(list.map(kept, (k) => { ...k, status: map.get(now, k.id) ?? k.status }), (k) => k.status != "GONE")
+    save(h, fresh)!
+    ok(fresh)
+  }
+}
+
+fn owned(kept: List[Kept]) -> List[policy.Owned] =
+  list.map(kept, (k) => policy.Owned { id: k.id, name: k.name, flavor: k.flavor, status: k.status })
+
+// ---- answers ----------------------------------------------------------------------------
+
+fn answer(status: Int, v: Value) -> HttpResponse = http.json(status, json.stringify_pretty(v))
+
+fn refusal(why: String, grant: String) -> HttpResponse = answer(403, value.object([
+  ("refused", value.str(why)),
+  ("grant", value.str(grant)),
+  ("next", value.str(if grant == "" then "take another path" else "take another path, or ask the person to set " + grant)),
+]))
+
+fn nowhere(method: String, path: String) -> HttpResponse =
+  answer(404, value.object([("error", value.str("no such door: " + method + " " + path + "; GET / lists what there is"))]))
+
+fn failure(e: String) -> HttpResponse = answer(502, value.object([("error", value.str(e))]))
+
+fn overview(h: Harbor, kept: List[Kept]) -> Value = value.object([
+  ("plans", value.array(list.map(h.limits.plans, (p) => value.object([("plan", value.str(p.flavor)), ("yen_month", value.int(p.yen_month))])))),
+  ("max_servers", value.int(h.limits.max_servers)),
+  ("yen_month", value.int(h.limits.yen_month)),
+  ("spending_yen_month", value.int(policy.spending(h.limits, owned(kept)))),
+  ("stopped_servers_are_billed", value.bool(h.limits.stopped_billed)),
+  ("name_prefix", value.str(h.limits.prefix)),
+  ("servers", value.array(list.map(kept, kept_json))),
+])
+
+// ---- the door ---------------------------------------------------------------------------
+
+effect fn audit(h: Harbor, method: String, path: String, body: String, verdict: String, detail: String) -> Unit = {
+  let line = json.stringify(value.object([("at", value.int(env.unix_timestamp())), ("method", value.str(method)), ("path", value.str(path)),
+    ("ask", value.str(string.take(body, 4000))), ("verdict", value.str(verdict)), ("detail", value.str(detail))]))
+  fs.append(h.state + "/audit.jsonl", line + "\n")!
+}
+
+effect fn handle(h: Harbor, req: HttpRequest) -> HttpResponse = {
+  let method = http.req_method(req)
+  let path = http.req_path(req)
+  if http.req_header(req, "Authorization") != some("Bearer " + h.token) then {
+    let _ = audit(h, method, path, "", "unauthorized", "")
+    answer(401, value.object([("error", value.str("show the harbor's token: Authorization: Bearer $ONOGORO_HARBOR_TOKEN"))]))
+  } else match serve_one(h, method, path, http.req_body(req)) {
+    ok((resp, verdict, detail)) => { let _ = audit(h, method, path, http.req_body(req), verdict, detail); resp },
+    err(e) => { let _ = audit(h, method, path, http.req_body(req), "failed", e); failure(e) },
+  }
+}
+
+// One ask: its answer, and what the audit log says of it.
+effect fn serve_one(h: Harbor, method: String, path: String, body: String) -> Result[(HttpResponse, String, String), String] = {
+  let tok = conoha.token(h.cloud)!
+  let kept = current(h, tok)!
+  let parts = list.filter(string.split(path, "/"), (s) => s != "")
+  if method == "GET" and list.is_empty(parts) then ok((answer(200, overview(h, kept)), "read", ""))
+  else if method == "GET" and parts == ["servers"] then ok((answer(200, value.array(list.map(kept, kept_json))), "read", ""))
+  else if method == "POST" and parts == ["servers"] then {
+    let v = json.parse(body) ?? value.null()
+    let name = json.get_string(v, "name") ?? ""
+    let plan = json.get_string(v, "plan") ?? ""
+    decided(h, kept, policy.Create { name: name, flavor: plan }, () => {
+      let (id, volume) = conoha.create(h.cloud, tok, name, plan, json.get_string(v, "startup") ?? "")!
+      let k = Kept { id: id, name: name, flavor: plan, volume: volume, status: if h.cloud.dry then "ACTIVE" else "BUILD" }
+      save(h, kept + [k])!
+      ok(answer(202, kept_json(k)))
+    })
+  }
+  else match (method, parts) {
+    ("DELETE", ["servers", id]) => decided(h, kept, policy.Delete { id: id }, () => {
+      let volume = (list.find(kept, (k) => k.id == id) ?? Kept { id: id, name: "", flavor: "", volume: "", status: "" }).volume
+      conoha.delete(h.cloud, tok, id, volume)!
+      save(h, list.filter(kept, (k) => k.id != id))!
+      ok(answer(200, value.object([("deleted", value.str(id))])))
+    }),
+    ("POST", ["servers", id, action]) => if action == "stop" then decided(h, kept, policy.Stop { id: id }, () => {
+      conoha.act(h.cloud, tok, id, "os-stop")!
+      save(h, list.map(kept, (k) => if k.id == id then { ...k, status: "SHUTOFF" } else k))!
+      ok(answer(202, value.object([("stopping", value.str(id)), ("still_billed", value.bool(h.limits.stopped_billed))])))
+    })
+    else if action == "start" then decided(h, kept, policy.Start { id: id }, () => {
+      conoha.act(h.cloud, tok, id, "os-start")!
+      save(h, list.map(kept, (k) => if k.id == id then { ...k, status: "ACTIVE" } else k))!
+      ok(answer(202, value.object([("starting", value.str(id))])))
+    })
+    else ok((nowhere(method, path), "unknown", "")),
+    _ => ok((nowhere(method, path), "unknown", "")),
+  }
+}
+
+effect fn decided(h: Harbor, kept: List[Kept], ask: policy.Ask, go: effect () -> HttpResponse) -> Result[(HttpResponse, String, String), String] =
+  match policy.decide(h.limits, owned(kept), ask) {
+    policy.Refuse { why, grant } => ok((refusal(why, grant), "refused", why)),
+    policy.Allow => ok((go()!, "allowed", "")),
+  }
+
+effect fn command(args: List[String]) -> Result[Int, String] =
+  if list.contains(args, "--help") then { println(USAGE); ok(0) } else run()
+
+effect fn run() -> Result[Int, String] = {
+  let h = configured()!
+  fs.mkdir_p(h.state)!
+  eprintln("[onogoro harbor] :" + int.to_string(h.port) + (if h.cloud.dry then " (dry: no calls to ConoHa)" else " → ConoHa " + h.cloud.region)
+    + ", at most " + int.to_string(h.limits.max_servers) + " servers and " + int.to_string(h.limits.yen_month) + " yen a month")
+  http.serve(h.port, (req) => handle(h, req))
+  ok(0)
+}
+
+test "plans are read as plan=yen, and anything else is left out" {
+  assert_eq(plans("g2l-t-c2m1=1064, g2l-t-c4m4 = 3969,broken,x=y"),
+    [policy.Plan { flavor: "g2l-t-c2m1", yen_month: 1064 }, policy.Plan { flavor: "g2l-t-c4m4", yen_month: 3969 }])
+  assert_eq(plans(""), ([]: List[policy.Plan]))
+}

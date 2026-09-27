@@ -10,6 +10,7 @@
 import env
 import fs
 import process
+import self.harbor
 import self.policy
 
 let USAGE = """
@@ -20,11 +21,16 @@ onogoro [comide's arguments]      comide, with every tool's command confined by 
   ONOGORO_NET      open (default) or none: the network for commands and golemide
   ONOGORO_KEYS     the variables golemide is given for its own model calls, comma
                    separated (default: every model key that is set)
+  ONOGORO_HARBOR_PORT, ONOGORO_HARBOR_TOKEN
+                   where the harbor is, passed to commands (not to looking)
+
+onogoro harbor                    the door to ConoHa for agents; onogoro harbor --help
 """
 
 effect fn main() -> Unit = {
   let args = process.args()
   let code = if (env.get("ONOGORO_ROLE") ?? "") == "worker" then worker(list.drop(args, 1))!
+    else if list.get(args, 1) == some("harbor") then harbor.command(list.drop(args, 2))!
     else if list.contains(args, "--help") and list.len(args) == 2 then { println(USAGE); 0 }
     else supervisor(args)!
   process.exit(code)
@@ -79,6 +85,8 @@ effect fn world() -> Result[policy.World, String] = {
     keys: keys,
     as_root: uid == "0",
     net: env.get("ONOGORO_NET") ?? "open",
+    harbor_port: int.parse(env.get("ONOGORO_HARBOR_PORT") ?? "") ?? 0,
+    harbor_token: env.get("ONOGORO_HARBOR_TOKEN") ?? "",
   })
 }
 

@@ -59,6 +59,20 @@ onogoro は、既にある 2 つの道具を組み合わせる。どちらも単
 呼び出しのところに引く。エージェントの会話のループは鍵と一緒に外に残り、モデルが実行を
 頼んだものは 1 回ずつ中で動く。中から見えるのは、鍵の代わりの偽の値だけになる。
 
+## ConoHa の上で
+
+24 時間働くエージェントは、定額の VPS に住むのが向いている。ただし、サーバーを作れる
+エージェントは 100 台作れる。`onogoro harbor`（港）は、エージェントと ConoHa の間の扉だ。
+ConoHa の API ユーザーは harbor だけが持ち、エージェントには見せない。サーバーを作るのは、
+人が決めたプラン・台数・月額（円）の範囲の中だけ。断るときは、許すための設定を添えてモデルに返す。
+`deploy/conoha/` は、harbor と 4 体の AI 社員（timer で動く）を VPS 1 台に立てる。
+詳しくは [docs/conoha_ja.md](docs/conoha_ja.md)。
+
+```sh
+ONOGORO_HARBOR_DRY=1 ONOGORO_HARBOR_TOKEN=$(openssl rand -hex 24) \
+ONOGORO_HARBOR_PLANS=g2l-t-c2m1=1064 ONOGORO_HARBOR_YEN_MONTH=3000 onogoro harbor
+```
+
 ## なぜもう 1 つ作るのか
 
 Cloudflare OS、OpenShell、nono も、鍵をエージェントから遠ざける。onogoro の違いは次のとおり。

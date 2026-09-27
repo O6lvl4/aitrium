@@ -1,0 +1,19 @@
+[Unit]
+Description=onogoro harbor: the agents' one door to ConoHa, inside the limits in harbor.env
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=harbor
+EnvironmentFile=/etc/onogoro/harbor.env
+Environment=ONOGORO_HARBOR_STATE=/var/lib/onogoro-harbor
+ExecStart=/usr/local/bin/onogoro harbor
+Restart=on-failure
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/onogoro-harbor
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target
