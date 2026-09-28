@@ -1,5 +1,16 @@
-<p align="center">コーディングエージェントが働くための世界。道具はカーネルが強制するサンドボックスの中で動き、<br>鍵はその外に置かれる。</p>
-<p align="center"><a href="README.md">English</a></p>
+<h1 align="center">Aitrium</h1>
+
+<p align="center">
+  コーディングエージェントが働くための世界。道具はカーネルが強制するサンドボックスの中で動き、<br>
+  鍵はその外に置かれる。
+</p>
+
+<p align="center">
+  <a href="README.md"><img alt="English" src="https://img.shields.io/badge/English-d0d7de?style=flat-square"></a>
+  <a href="README.ja.md"><img alt="日本語" src="https://img.shields.io/badge/%E6%97%A5%E6%9C%AC%E8%AA%9E-24292f?style=flat-square"></a>
+</p>
+
+---
 
 > 古代ローマの家では、玄関（*porta*）をくぐると、すぐにアトリウムという中庭の広間に出た。
 > 客はそこで迎え入れられ、家の仕事も主人の目の届くそこで進んだ。金庫もその広間に置かれていたが、
