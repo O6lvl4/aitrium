@@ -24,8 +24,8 @@ onogoro [comide's arguments]      comide, with every tool's command confined by 
   ONOGORO_CREDENTIALS  broker (default) or by-name. broker: golemide's model keys go in as
                    porta placeholders bound to the model's host, and porta's proxy puts the
                    real key on there alone; needs porta with --credential and a golemide
-                   built on an Almide whose HTTP client honours HTTPS_PROXY (develop,
-                   51b9d8e or later). by-name hands golemide the keys themselves
+                   built on an Almide whose HTTP client honours HTTPS_PROXY (v0.65.1-rc2
+                   or later). by-name hands golemide the keys themselves
   ONOGORO_WRITABLE more directories commands and golemide may write, colon separated
                    (default: none). In a throwaway container, /usr:/var:/etc lets
                    pip and apt install as the task expects; not for a laptop.

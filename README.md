@@ -12,7 +12,7 @@ The agent works on the island. The keys never land there.
 **Status: phase 2 of [the plan](docs/design.md).** Every command comide runs goes through
 porta, and no key goes in with any of them: golemide, which calls the model itself, is
 handed placeholders that porta's proxy swaps for the real key on the model's host alone
-(almide/porta#37). This rests on unreleased fixes: porta and Almide from develop (see
+(almide/porta#37). This rests on porta from develop and Almide v0.65.1-rc2 or later (see
 `onogoro --help`); `ONOGORO_CREDENTIALS=by-name` hands golemide the keys themselves instead.
 
 ```sh

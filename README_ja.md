@@ -11,8 +11,8 @@ onogoro は、エージェントのためにその最初の島を作る。どこ
 
 **状態：[計画](docs/design.md) のフェーズ 2。** comide が実行するコマンドはすべて porta を
 通り、どれにも鍵は入らない。自分でモデルを呼ぶ golemide にも偽の値だけを渡し、porta の
-プロキシがモデルの宛先でだけ本物の鍵に差し替える（almide/porta#37）。これは未リリースの
-修正（porta と Almide の develop。`onogoro --help` を参照）に依っている。`ONOGORO_CREDENTIALS=by-name`
+プロキシがモデルの宛先でだけ本物の鍵に差し替える（almide/porta#37）。これは porta の
+develop と Almide v0.65.1-rc2 以降（`onogoro --help` を参照）に依っている。`ONOGORO_CREDENTIALS=by-name`
 にすると、golemide には鍵そのものを渡す。
 
 ```sh
