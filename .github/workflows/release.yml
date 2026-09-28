@@ -1,6 +1,6 @@
 name: release
 
-# A tag v* builds onogoro with everything it runs (scripts/package.sh, the parts at the
+# A tag v* builds aitrium with everything it runs (scripts/package.sh, the parts at the
 # commits dist/PARTS names) for each platform, and publishes the archives install.sh
 # fetches. Run by hand, it builds them without publishing.
 on:
@@ -31,14 +31,14 @@ jobs:
       - run: scripts/package.sh dist/out
       - name: Starts on its own
         run: |
-          mkdir -p /tmp/try && ONOGORO_ARCHIVE="dist/out/onogoro-${{ matrix.target }}.tar.gz" ONOGORO_PREFIX=/tmp/try sh install.sh
-          /tmp/try/bin/onogoro --help | head -1
-          /tmp/try/share/onogoro/comide --help > /dev/null
-          /tmp/try/share/onogoro/golemide --version
-          /tmp/try/share/onogoro/porta --version
+          mkdir -p /tmp/try && AITRIUM_ARCHIVE="dist/out/aitrium-${{ matrix.target }}.tar.gz" AITRIUM_PREFIX=/tmp/try sh install.sh
+          /tmp/try/bin/aitrium --help | head -1
+          /tmp/try/share/aitrium/comide --help > /dev/null
+          /tmp/try/share/aitrium/golemide --version
+          /tmp/try/share/aitrium/porta --version
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: onogoro-${{ matrix.target }}
+          name: aitrium-${{ matrix.target }}
           path: dist/out/*
 
   publish:

@@ -1,4 +1,4 @@
-# onogoro design
+# aitrium design
 
 ## The problem
 
@@ -54,9 +54,9 @@ Not protected:
 
 ## The parts, and the seam in each
 
-| Part | What onogoro needs from it | Seam |
+| Part | What aitrium needs from it | Seam |
 |---|---|---|
-| comide | the loop, the tools, the permission prompt | every command comide runs goes through `toolkit.run_program` (`src/toolkit.almd`). A `runner` in `toolkit.Setup` would let onogoro wrap each call with no fork of comide. |
+| comide | the loop, the tools, the permission prompt | every command comide runs goes through `toolkit.run_program` (`src/toolkit.almd`). A `runner` in `toolkit.Setup` would let aitrium wrap each call with no fork of comide. |
 | golemide | edits, solve, verify | `solve` calls the model itself, and it runs the verify command. Phase 1 runs all of golemide as a worker. The broker (phase 2) gives it a placeholder key. |
 | porta | the confinement, the proxy | phase 1: the `porta` binary, run once per call. Later: imported as an Almide library, so there is one binary and no exec per call. |
 | almai | model calls | used only by the supervisor |
@@ -67,7 +67,7 @@ Each phase ends on a measurement: Terminal-Bench 2.0 tasks solved (comide `bench
 and, from phase 3, porta's containment suite.
 
 1. **The line, with the binaries that exist.**
-   - onogoro starts comide with a runner that wraps each tool call:
+   - aitrium starts comide with a runner that wraps each tool call:
      `porta run <cmd> -v <project> -v <scratch> --allow-net … -- <args>`.
    - Workers get an empty environment, with no keys.
    - golemide runs as a worker. It needs a model key for `solve`, so in this phase
@@ -106,12 +106,12 @@ and, from phase 3, porta's containment suite.
   Desktop shares)
 - almide/porta#37: a credential broker in the proxy (phase 2)
 - O6lvl4/comide#2: a `runner` seam in `toolkit.Setup` (phase 1)
-- O6lvl4/comide#1: a reply cut off before any text ends the turn. This is not onogoro's
+- O6lvl4/comide#1: a reply cut off before any text ends the turn. This is not aitrium's
   bug, but it caps what the measurements can show.
 
 ## Open questions
 
-- **How onogoro drives comide.** Import comide's modules as an Almide dependency and pass
+- **How aitrium drives comide.** Import comide's modules as an Almide dependency and pass
   a runner, or run comide as a process with a flag that points its commands at a runner
   program. The dependency is cleaner. The process form keeps comide's release independent.
 - **golemide's own model calls.** Should golemide ask the supervisor to make them for it
