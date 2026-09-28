@@ -9,11 +9,11 @@ onogoro makes that first island for an agent. The one who makes it decides where
 ends and the sea begins: what may be written, what may be read, which hosts may be reached.
 The agent works on the island. The keys never land there.
 
-**Status: phase 1 of [the plan](docs/design.md).** The line is drawn with the binaries
-that exist: every command comide runs goes through porta, and no key goes in with it
-except to golemide, which calls the model itself. `ONOGORO_CREDENTIALS=broker` closes that
-too, handing golemide placeholders only (porta's credential broker, almide/porta#37); it
-is opt-in until porta and Almide release what it needs.
+**Status: phase 2 of [the plan](docs/design.md).** Every command comide runs goes through
+porta, and no key goes in with any of them: golemide, which calls the model itself, is
+handed placeholders that porta's proxy swaps for the real key on the model's host alone
+(almide/porta#37). This rests on unreleased fixes: porta and Almide from develop (see
+`onogoro --help`); `ONOGORO_CREDENTIALS=by-name` hands golemide the keys themselves instead.
 
 ```sh
 onogoro                       # comide's conversation, every tool's command confined
@@ -28,7 +28,7 @@ to commands; `onogoro --help` says the rest.
 |---|---|---|---|
 | `read` (hew, git status) | a scratch dir | none | none |
 | `shell` (what the model wrote) | the project, the scratch dir | open (`ONOGORO_NET`) | none |
-| `solve` (golemide) | the project, the scratch dir | open | the model keys, by name; with `ONOGORO_CREDENTIALS=broker`, placeholders that porta swaps for the key on the model's host alone |
+| `solve` (golemide) | the project, the scratch dir | open | placeholders, which porta swaps for the key on the model's host alone (`ONOGORO_CREDENTIALS=by-name`: the keys) |
 
 Every call also has the files the keys live in (`~/.config/golemide/.env`, …) closed to
 reads, `TMPDIR` set to the scratch dir, and credential stores closed by porta's preset.

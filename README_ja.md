@@ -9,11 +9,11 @@ onogoro は、エージェントのためにその最初の島を作る。どこ
 （書ける場所、読める場所、通信できる宛先）は、島を作った者が決める。エージェントは島の上で
 働き、鍵は島に持ち込まれない。
 
-**状態：[計画](docs/design.md) のフェーズ 1。** 今ある道具で線を引いた段階。comide が
-実行するコマンドはすべて porta を通り、鍵は中に入らない。例外は golemide で、自分で
-モデルを呼ぶため鍵を名前で渡している。`ONOGORO_CREDENTIALS=broker` にすると、golemide にも
-偽の値しか渡さない（porta の鍵の受け渡し、almide/porta#37）。porta と Almide の必要な
-修正がリリースされるまでは、明示したときだけ使う。
+**状態：[計画](docs/design.md) のフェーズ 2。** comide が実行するコマンドはすべて porta を
+通り、どれにも鍵は入らない。自分でモデルを呼ぶ golemide にも偽の値だけを渡し、porta の
+プロキシがモデルの宛先でだけ本物の鍵に差し替える（almide/porta#37）。これは未リリースの
+修正（porta と Almide の develop。`onogoro --help` を参照）に依っている。`ONOGORO_CREDENTIALS=by-name`
+にすると、golemide には鍵そのものを渡す。
 
 ```sh
 onogoro                       # comide の会話。道具のコマンドはすべて縛られる
@@ -28,7 +28,7 @@ comide（`--runner` のある 0.5.0 以降、O6lvl4/comide#2）と porta が `PA
 |---|---|---|---|
 | `read`（hew、git status） | 作業用のディレクトリ | 無し | 無し |
 | `shell`（モデルが書いたコマンド） | プロジェクト、作業用のディレクトリ | 開いている（`ONOGORO_NET`） | 無し |
-| `solve`（golemide） | プロジェクト、作業用のディレクトリ | 開いている | モデルの鍵を名前で。`ONOGORO_CREDENTIALS=broker` なら偽の値で、porta がモデルの宛先でだけ本物に差し替える |
+| `solve`（golemide） | プロジェクト、作業用のディレクトリ | 開いている | 偽の値。porta がモデルの宛先でだけ本物に差し替える（`ONOGORO_CREDENTIALS=by-name` なら鍵そのもの） |
 
 どの呼び出しでも、鍵が置かれたファイル（`~/.config/golemide/.env` など）は読めず、
 `TMPDIR` は作業用のディレクトリになり、資格情報の置き場は porta の既定の方針で閉じられる。

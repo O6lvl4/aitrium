@@ -21,10 +21,11 @@ onogoro [comide's arguments]      comide, with every tool's command confined by 
   ONOGORO_KEYS     the variables golemide is given for its own model calls, comma
                    separated (default: every model key that is set)
   ONOGORO_BRIDGE   the Claude bridge (default: bridge/claude_bridge.py beside onogoro)
-  ONOGORO_CREDENTIALS  by-name (default) or broker: golemide's model keys go in as porta
-                   placeholders bound to the model's host, and porta's proxy puts the
-                   real key on there alone. Needs porta with --credential and a golemide
-                   built on an Almide whose HTTP client honours HTTPS_PROXY
+  ONOGORO_CREDENTIALS  broker (default) or by-name. broker: golemide's model keys go in as
+                   porta placeholders bound to the model's host, and porta's proxy puts the
+                   real key on there alone; needs porta with --credential and a golemide
+                   built on an Almide whose HTTP client honours HTTPS_PROXY (develop,
+                   51b9d8e or later). by-name hands golemide the keys themselves
   ONOGORO_WRITABLE more directories commands and golemide may write, colon separated
                    (default: none). In a throwaway container, /usr:/var:/etc lets
                    pip and apt install as the task expects; not for a laptop.
@@ -72,9 +73,10 @@ effect fn supervisor(args: List[String]) -> Result[Int, String] = {
 // Said once at the start rather than as a failed solve: a porta without --credential
 // would refuse every golemide call the broker is asked for.
 effect fn broker_ready(porta: String) -> Result[Unit, String] =
-  if (env.get("ONOGORO_CREDENTIALS") ?? "") != "broker" then ok(())
+  if (env.get("ONOGORO_CREDENTIALS") ?? "broker") == "by-name" then ok(())
   else if string.contains(process.exec(porta, ["run", "--help"]) ?? "", "--credential") then ok(())
-  else err("onogoro: ONOGORO_CREDENTIALS=broker needs a porta with --credential (almide/porta#37); " + porta + " has none")
+  else err("onogoro: " + porta + " has no --credential, which golemide's keys go in by (almide/porta#37); "
+    + "use a porta built from develop, or ONOGORO_CREDENTIALS=by-name to hand the keys in by name")
 
 // ---- Claude's login, from inside ------------------------------------------------------
 
@@ -168,7 +170,7 @@ effect fn world() -> Result[policy.World, String] = {
     as_root: uid == "0",
     net: env.get("ONOGORO_NET") ?? "open",
     writable: list.filter(list.map(string.split(env.get("ONOGORO_WRITABLE") ?? "", ":"), string.trim), (d) => d != "" and fs.exists(d)),
-    broker: (env.get("ONOGORO_CREDENTIALS") ?? "") == "broker",
+    broker: (env.get("ONOGORO_CREDENTIALS") ?? "broker") != "by-name",
   })
 }
 
