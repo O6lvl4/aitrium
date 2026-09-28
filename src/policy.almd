@@ -8,7 +8,12 @@
 
 // Where the run is: the project, a scratch directory of this session's own, the files
 // the keys are kept in (closed to reads), and whether porta runs as root (a container).
-type World = { root: String, scratch: String, key_files: List[String], keys: List[String], as_root: Bool, net: String }
+// `writable` is more a command and golemide may write, from ONOGORO_WRITABLE. On a laptop
+// it is empty: a package goes into the project's own environment. In a container that is
+// thrown away after the task it is where the system's packages go (/usr, /var, /etc),
+// because there the files are not what needs keeping safe; the keys and the network are.
+type World = { root: String, scratch: String, key_files: List[String], keys: List[String], as_root: Bool, net: String,
+  writable: List[String] = [] }
 
 // The variables golemide reads its models' credentials from. The last two are not keys:
 // they are the supervisor's Claude bridge (bridge/claude_bridge.py), its URL and the
@@ -27,9 +32,11 @@ fn grants(w: World, kind: String) -> List[String] =
     + network(w, kind)
     + passed(w, kind)
 
-// Looking writes nothing but its own scratch; a command and golemide write the project.
+// Looking writes nothing but its own scratch; a command and golemide write the project,
+// and whatever else the session made writable.
 fn writes(w: World, kind: String) -> List[String] =
-  if kind == "read" then ["-v", w.scratch] else ["-v", w.root, "-v", w.scratch]
+  if kind == "read" then ["-v", w.scratch]
+  else ["-v", w.root, "-v", w.scratch] + list.flat_map(w.writable, (d) => ["-v", d])
 
 // Looking needs no network. A command gets what the session allows: open by default,
 // because installing a package is ordinary work; `none` closes it.
@@ -55,6 +62,13 @@ test "a command writes the project, and no key goes in with it" {
   assert_eq(g, ["--allow-root", "-e", "TMPDIR=/tmp/s", "-v", "/w/p", "-v", "/tmp/s"])
   assert(not list.contains(g, "--env-pass"))
   assert(list.contains(grants({ ...w, net: "none" }, "shell"), "--no-net"))
+}
+
+test "what the session makes writable goes to commands and golemide, not to looking" {
+  let w = World { root: "/w/p", scratch: "/tmp/s", key_files: [], keys: [], as_root: true, net: "open", writable: ["/usr", "/var"] }
+  assert_eq(writes(w, "shell"), ["-v", "/w/p", "-v", "/tmp/s", "-v", "/usr", "-v", "/var"])
+  assert_eq(writes(w, "solve"), ["-v", "/w/p", "-v", "/tmp/s", "-v", "/usr", "-v", "/var"])
+  assert_eq(writes(w, "read"), ["-v", "/tmp/s"])
 }
 
 test "golemide alone is given the model keys, by name" {

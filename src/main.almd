@@ -21,6 +21,9 @@ onogoro [comide's arguments]      comide, with every tool's command confined by 
   ONOGORO_KEYS     the variables golemide is given for its own model calls, comma
                    separated (default: every model key that is set)
   ONOGORO_BRIDGE   the Claude bridge (default: bridge/claude_bridge.py beside onogoro)
+  ONOGORO_WRITABLE more directories commands and golemide may write, colon separated
+                   (default: none). In a throwaway container, /usr:/var:/etc lets
+                   pip and apt install as the task expects; not for a laptop.
 
 With --model claude (or claude/MODEL), comide talks to claude -p on this machine's
 login, and golemide reaches the same model through a bridge on 127.0.0.1 that only
@@ -152,6 +155,7 @@ effect fn world() -> Result[policy.World, String] = {
     keys: keys,
     as_root: uid == "0",
     net: env.get("ONOGORO_NET") ?? "open",
+    writable: list.filter(list.map(string.split(env.get("ONOGORO_WRITABLE") ?? "", ":"), string.trim), (d) => d != "" and fs.exists(d)),
   })
 }
 
