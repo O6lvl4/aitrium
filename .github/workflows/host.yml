@@ -1,0 +1,38 @@
+name: host
+
+# A release, installed the way a person installs it, on a bare Linux machine (no container
+# around it, as on a VPS): the confinement is the kernel's own, so this is where porta's
+# Landlock, user namespaces and seccomp, and Ubuntu's AppArmor rule on user namespaces, meet.
+# Run by hand, with the release to try.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: release tag, or latest
+        default: latest
+
+permissions:
+  contents: read
+
+jobs:
+  host:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-22.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Install
+        env:
+          ONOGORO_VERSION: ${{ inputs.version }}
+        run: sh install.sh && echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: The host
+        run: |
+          uname -a
+          sysctl kernel.apparmor_restrict_unprivileged_userns kernel.unprivileged_userns_clone user.max_user_namespaces 2>/dev/null || true
+          cat /sys/kernel/security/lsm; echo
+      - name: Confined, one call at a time
+        run: bash scripts/host-check.sh
