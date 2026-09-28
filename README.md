@@ -31,6 +31,12 @@ to commands; `onogoro --help` says the rest.
 Every call also has the files the keys live in (`~/.config/golemide/.env`, …) closed to
 reads, `TMPDIR` set to the scratch dir, and credential stores closed by porta's preset.
 
+**On your Claude login.** `onogoro --model claude/sonnet` (or `claude`, `claude/opus`)
+runs comide on Claude Code's `claude -p`. golemide, inside, cannot use that login:
+porta closes the Keychain it lives in. So onogoro starts a bridge on 127.0.0.1
+(`bridge/claude_bridge.py`, needs `python3`) with a token for the session, and `solve`
+is given only the bridge's URL and that token. The bridge stops when comide does.
+
 ## What it is
 
 onogoro puts two existing tools together. Both stay products of their own:

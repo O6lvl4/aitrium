@@ -10,9 +10,11 @@
 // the keys are kept in (closed to reads), and whether porta runs as root (a container).
 type World = { root: String, scratch: String, key_files: List[String], keys: List[String], as_root: Bool, net: String }
 
-// The variables golemide reads its models' credentials from.
+// The variables golemide reads its models' credentials from. The last two are not keys:
+// they are the supervisor's Claude bridge (bridge/claude_bridge.py), its URL and the
+// session's token, which is all golemide holds when the model is Claude's login.
 let MODEL_KEYS = ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN", "ANTHROPIC_API_KEY", "GEMINI_API_KEY",
-  "GOOGLE_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY"]
+  "GOOGLE_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "CLAUDECLI_BASE_URL", "CLAUDECLI_API_KEY"]
 
 // porta's flags for one call, everything between the command and `--`. TMPDIR is the
 // scratch directory: without it a Rust program (golemide, hew) on macOS reaches for its

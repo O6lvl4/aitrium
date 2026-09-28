@@ -20,6 +20,11 @@ onogoro [comide's arguments]      comide, with every tool's command confined by 
   ONOGORO_NET      open (default) or none: the network for commands and golemide
   ONOGORO_KEYS     the variables golemide is given for its own model calls, comma
                    separated (default: every model key that is set)
+  ONOGORO_BRIDGE   the Claude bridge (default: bridge/claude_bridge.py beside onogoro)
+
+With --model claude (or claude/MODEL), comide talks to claude -p on this machine's
+login, and golemide reaches the same model through a bridge on 127.0.0.1 that only
+this session's token opens: the login itself never goes inside.
 """
 
 effect fn main() -> Unit = {
@@ -46,9 +51,77 @@ effect fn supervisor(args: List[String]) -> Result[Int, String] = {
   env.set("ONOGORO_SCRATCH", scratch)
   env.set("ONOGORO_PORTA_BIN", porta)
   env.set("COMIDE_RUNNER", me)
+  let bridge = match option.flat_map(option_after(args, "--model"), claude_model) {
+    some(model) => some(claude_bridge(me, model, scratch)!),
+    none => none,
+  }
   let code = process.exec_attached(comide, list.drop(args, 1))!
+  match bridge { some(b) => { let _ = process.exec("kill", [b.pid]) }, none => () }
   let _ = fs.remove_all(scratch)
   ok(code)
+}
+
+// ---- Claude's login, from inside ------------------------------------------------------
+
+// comide on `claude`, `claude/MODEL`, `claude:MODEL` or `cli/claude` talks to Claude Code's
+// claude -p on this machine's login. golemide, confined, cannot: porta closes the
+// Keychain the login is in. So the supervisor runs a bridge that golemide reaches with
+// a URL and this session's token, and nothing else of the login goes in.
+type Bridge = { pid: String, url: String, token: String }
+
+// The model after `claude`, "default" when none is named.
+fn claude_model(m: String) -> String? =
+  if m == "claude" or m == "cli/claude" then some("default")
+  else match string.strip_prefix(m, "claude/") {
+    some(x) => some(x),
+    none => string.strip_prefix(m, "claude:"),
+  }
+
+effect fn claude_bridge(me: String, model: String, scratch: String) -> Result[Bridge, String] = {
+  let script = bridge_script(me)!
+  let token = string.trim(process.exec("openssl", ["rand", "-hex", "16"]) ?? "")
+  if token == "" then err("onogoro: could not make a token for the Claude bridge (openssl rand)")
+  else {
+    let port = int.to_string(20000 + process.pid() % 20000)
+    let pid = string.trim(process.exec("sh", ["-c", "python3 \"$0\" --host 127.0.0.1 --port \"$1\" --token \"$2\" > \"$3\" 2>&1 & echo $!",
+      script, port, token, scratch + "/claude-bridge.log"]) ?? "")
+    let url = "http://127.0.0.1:" + port + "/v1"
+    ready(url + "/models", 50)!
+    env.set("CLAUDECLI_BASE_URL", url)
+    env.set("CLAUDECLI_API_KEY", token)
+    // solve follows the conversation onto Claude, unless the person chose its model.
+    if option.is_none(env.get("COMIDE_SOLVE_MODEL")) then env.set("COMIDE_SOLVE_MODEL", "claudecli/" + model)
+    ok(Bridge { pid: pid, url: url, token: token })
+  }
+}
+
+// bridge/claude_bridge.py beside this binary's real path, or ONOGORO_BRIDGE.
+effect fn bridge_script(me: String) -> Result[String, String] = {
+  let real = string.trim(process.exec("realpath", [me]) ?? me)
+  let beside = (string.strip_suffix(real, "/onogoro") ?? real) + "/bridge/claude_bridge.py"
+  let script = env.get("ONOGORO_BRIDGE") ?? beside
+  if fs.exists(script) then ok(script) else err("onogoro: the Claude bridge is not at " + script + " (ONOGORO_BRIDGE)")
+}
+
+// Up to `tries` tenths of a second for the bridge to answer.
+effect fn ready(url: String, tries: Int) -> Result[Unit, String] = {
+  var left = tries
+  var up = false
+  while not up and left > 0 {
+    up = match process.exec_status("curl", ["-fsS", "-o", "/dev/null", url]) { ok(st) => st.code == 0, err(_) => false }
+    if not up then { let _ = process.exec("sleep", ["0.1"]) }
+    left = left - 1
+  }
+  if up then ok(()) else err("onogoro: the Claude bridge did not start (" + url + ")")
+}
+
+test "which models go through the bridge" {
+  assert_eq(claude_model("claude"), some("default"))
+  assert_eq(claude_model("claude/opus"), some("opus"))
+  assert_eq(claude_model("claude:sonnet"), some("sonnet"))
+  assert_eq(claude_model("cli/claude"), some("default"))
+  assert_eq(claude_model("cf/glm-5.3-flash"), none)
+  assert_eq(claude_model("claudecli/sonnet"), none)
 }
 
 // ---- a worker ---------------------------------------------------------------------------

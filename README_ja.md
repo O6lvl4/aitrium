@@ -31,6 +31,12 @@ comide（`--runner` のある 0.5.0 以降、O6lvl4/comide#2）と porta が `PA
 どの呼び出しでも、鍵が置かれたファイル（`~/.config/golemide/.env` など）は読めず、
 `TMPDIR` は作業用のディレクトリになり、資格情報の置き場は porta の既定の方針で閉じられる。
 
+**Claude のログインで使う。** `onogoro --model claude/sonnet`（または `claude`、`claude/opus`）
+とすると、comide は Claude Code の `claude -p` で動く。中の golemide はそのログインを使えない。
+ログインが入っているキーチェーンを porta が閉じているからだ。そこで onogoro は 127.0.0.1 に
+ブリッジ（`bridge/claude_bridge.py`、`python3` が要る）をセッション限りの合言葉つきで立て、
+`solve` にはブリッジの URL と合言葉だけを渡す。ブリッジは comide が終わると止まる。
+
 ## 何か
 
 onogoro は、既にある 2 つの道具を組み合わせる。どちらも単体の製品のまま残る。
