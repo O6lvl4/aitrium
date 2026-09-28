@@ -26,7 +26,7 @@ to commands; `onogoro --help` says the rest.
 |---|---|---|---|
 | `read` (hew, git status) | a scratch dir | none | none |
 | `shell` (what the model wrote) | the project, the scratch dir | open (`ONOGORO_NET`) | none |
-| `solve` (golemide) | the project, the scratch dir | open | the model keys, by name |
+| `solve` (golemide) | the project, the scratch dir | open | the model keys, by name; with `ONOGORO_CREDENTIALS=broker`, placeholders that porta swaps for the key on the model's host alone |
 
 Every call also has the files the keys live in (`~/.config/golemide/.env`, …) closed to
 reads, `TMPDIR` set to the scratch dir, and credential stores closed by porta's preset.

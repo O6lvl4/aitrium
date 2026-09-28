@@ -3,8 +3,10 @@
 // `solve` is golemide, which edits and runs the verify command. Each becomes one
 // `porta run`, and this is where the grants for it are decided.
 //
-// No key goes into a worker except to `solve`, and that one only until porta can hand
-// keys in as placeholders (almide/porta#37): golemide calls the model itself.
+// No key goes into a worker except to `solve`: golemide calls the model itself. With the
+// broker (ONOGORO_CREDENTIALS=broker, porta with --credential, almide/porta#37) not even
+// that one: golemide is handed a placeholder, and porta's proxy puts the real key on its
+// requests to the model's host alone.
 
 // Where the run is: the project, a scratch directory of this session's own, the files
 // the keys are kept in (closed to reads), and whether porta runs as root (a container).
@@ -12,8 +14,25 @@
 // it is empty: a package goes into the project's own environment. In a container that is
 // thrown away after the task it is where the system's packages go (/usr, /var, /etc),
 // because there the files are not what needs keeping safe; the keys and the network are.
+// `broker` says the keys go in as porta placeholders rather than by name.
 type World = { root: String, scratch: String, key_files: List[String], keys: List[String], as_root: Bool, net: String,
-  writable: List[String] = [] }
+  writable: List[String] = [], broker: Bool = false }
+
+// The host each secret is good for, which is where porta's proxy may put it on. The
+// account id is not a secret (it is in the URL), and the Claude bridge's URL and token
+// are for a server on 127.0.0.1 that porta's proxy does not intercept: those go in by
+// name either way.
+let KEY_HOSTS = [
+  ("CLOUDFLARE_API_TOKEN", "api.cloudflare.com"),
+  ("ANTHROPIC_API_KEY", "api.anthropic.com"),
+  ("OPENAI_API_KEY", "api.openai.com"),
+  ("OPENROUTER_API_KEY", "openrouter.ai"),
+  ("GEMINI_API_KEY", "generativelanguage.googleapis.com"),
+  ("GOOGLE_API_KEY", "generativelanguage.googleapis.com"),
+]
+
+fn host_of(key: String) -> String? =
+  option.map(list.find(KEY_HOSTS, (kh) => kh.0 == key), (kh) => kh.1)
 
 // The variables golemide reads its models' credentials from. The last two are not keys:
 // they are the supervisor's Claude bridge (bridge/claude_bridge.py), its URL and the
@@ -43,8 +62,17 @@ fn writes(w: World, kind: String) -> List[String] =
 fn network(w: World, kind: String) -> List[String] =
   if kind == "read" or w.net == "none" then ["--no-net"] else []
 
+// What golemide is given of the keys: all by name, or with the broker each secret as a
+// placeholder bound to its host, and the rest by name.
 fn passed(w: World, kind: String) -> List[String] =
-  if kind == "solve" and not list.is_empty(w.keys) then ["--env-pass", string.join(w.keys, ",")] else []
+  if kind != "solve" or list.is_empty(w.keys) then []
+  else if not w.broker then ["--env-pass", string.join(w.keys, ",")]
+  else {
+    let bound = list.filter(w.keys, (k) => option.is_some(host_of(k)))
+    let named = list.filter(w.keys, (k) => option.is_none(host_of(k)))
+    list.flat_map(bound, (k) => ["--credential", k + "=" + (host_of(k) ?? "")])
+      + (if list.is_empty(named) then [] else ["--env-pass", string.join(named, ",")])
+  }
 
 // `porta run PROG GRANTS -- ARGS`: the whole invocation for one call.
 fn invocation(w: World, kind: String, prog: String, args: List[String]) -> List[String] =
@@ -69,6 +97,15 @@ test "what the session makes writable goes to commands and golemide, not to look
   assert_eq(writes(w, "shell"), ["-v", "/w/p", "-v", "/tmp/s", "-v", "/usr", "-v", "/var"])
   assert_eq(writes(w, "solve"), ["-v", "/w/p", "-v", "/tmp/s", "-v", "/usr", "-v", "/var"])
   assert_eq(writes(w, "read"), ["-v", "/tmp/s"])
+}
+
+test "with the broker, golemide gets placeholders bound to hosts, and the rest by name" {
+  let w = World { root: "/w/p", scratch: "/tmp/s", key_files: [], keys: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN", "ANTHROPIC_API_KEY"],
+    as_root: false, net: "open", broker: true }
+  assert_eq(passed(w, "solve"), ["--credential", "CLOUDFLARE_API_TOKEN=api.cloudflare.com", "--credential", "ANTHROPIC_API_KEY=api.anthropic.com",
+    "--env-pass", "CLOUDFLARE_ACCOUNT_ID"])
+  assert_eq(passed(w, "shell"), ([]: List[String]))
+  assert_eq(passed({ ...w, keys: ["CLAUDECLI_BASE_URL", "CLAUDECLI_API_KEY"] }, "solve"), ["--env-pass", "CLAUDECLI_BASE_URL,CLAUDECLI_API_KEY"])
 }
 
 test "golemide alone is given the model keys, by name" {

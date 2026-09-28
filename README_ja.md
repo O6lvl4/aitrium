@@ -26,7 +26,7 @@ comide（`--runner` のある 0.5.0 以降、O6lvl4/comide#2）と porta が `PA
 |---|---|---|---|
 | `read`（hew、git status） | 作業用のディレクトリ | 無し | 無し |
 | `shell`（モデルが書いたコマンド） | プロジェクト、作業用のディレクトリ | 開いている（`ONOGORO_NET`） | 無し |
-| `solve`（golemide） | プロジェクト、作業用のディレクトリ | 開いている | モデルの鍵を名前で |
+| `solve`（golemide） | プロジェクト、作業用のディレクトリ | 開いている | モデルの鍵を名前で。`ONOGORO_CREDENTIALS=broker` なら偽の値で、porta がモデルの宛先でだけ本物に差し替える |
 
 どの呼び出しでも、鍵が置かれたファイル（`~/.config/golemide/.env` など）は読めず、
 `TMPDIR` は作業用のディレクトリになり、資格情報の置き場は porta の既定の方針で閉じられる。
