@@ -16,12 +16,23 @@ develop と Almide v0.65.1-rc2 以降（`onogoro --help` を参照）に依っ�
 にすると、golemide には鍵そのものを渡す。
 
 ```sh
+curl -fsSL https://raw.githubusercontent.com/O6lvl4/onogoro/main/install.sh | sh
+```
+
+リリースには onogoro が動かすもの一式が入っている。comide、golemide、porta、gramide、hew、
+ctxgate を、[dist/PARTS](dist/PARTS) のコミットでまとめてビルドしたもの。
+`~/.local/share/onogoro` に展開し、`~/.local/bin/onogoro` からリンクするだけなので、手元の
+comide や porta はそのまま残る。対応は Apple silicon の macOS と、glibc 2.31 以降の Linux
+（x86_64、aarch64）。鍵は comide と golemide が読む場所（`~/.config/golemide/.env` か環境変数）に置く。
+
+```sh
 onogoro                       # comide の会話。道具のコマンドはすべて縛られる
 onogoro -p "fix the tests"    # 1 回だけの依頼。comide の引数はそのまま使える
 ```
 
-comide（`--runner` のある 0.5.0 以降、O6lvl4/comide#2）と porta が `PATH` にあるか、
-`ONOGORO_COMIDE` / `ONOGORO_PORTA` で指定する。`ONOGORO_NET=none` でコマンドの通信を閉じる。
+onogoro は隣にある comide と porta を使う。クローンから動かすときは、comide（`--runner` の
+ある 0.5.0 以降、O6lvl4/comide#2）と porta を `PATH` に置くか、`ONOGORO_COMIDE` /
+`ONOGORO_PORTA` で指定する。`ONOGORO_NET=none` でコマンドの通信を閉じる。
 残りは `onogoro --help` に書いてある。
 
 | comide が実行するもの | 書ける場所 | 通信 | 鍵 |

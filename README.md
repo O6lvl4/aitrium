@@ -16,12 +16,24 @@ handed placeholders that porta's proxy swaps for the real key on the model's hos
 `onogoro --help`); `ONOGORO_CREDENTIALS=by-name` hands golemide the keys themselves instead.
 
 ```sh
+curl -fsSL https://raw.githubusercontent.com/O6lvl4/onogoro/main/install.sh | sh
+```
+
+A release carries everything onogoro runs, built together at the commits
+[dist/PARTS](dist/PARTS) names: comide, golemide, porta, gramide, hew and ctxgate. It
+unpacks into `~/.local/share/onogoro` and links `~/.local/bin/onogoro`, so a comide or
+porta you already have stays as it is. For macOS on Apple silicon, and Linux on x86_64 and
+aarch64 with glibc 2.31 or newer. Keys go where comide and golemide read them
+(`~/.config/golemide/.env`, or the environment).
+
+```sh
 onogoro                       # comide's conversation, every tool's command confined
 onogoro -p "fix the tests"    # one request; any of comide's arguments work
 ```
 
-It needs comide (0.5.0 with `--runner`, O6lvl4/comide#2) and porta on `PATH`, or
-`ONOGORO_COMIDE` / `ONOGORO_PORTA` pointing at them. `ONOGORO_NET=none` closes the network
+onogoro runs the comide and porta beside it; from a clone, put comide (0.5.0 with
+`--runner`, O6lvl4/comide#2) and porta on `PATH`, or point `ONOGORO_COMIDE` /
+`ONOGORO_PORTA` at them. `ONOGORO_NET=none` closes the network
 to commands; `onogoro --help` says the rest.
 
 | What comide runs | Writes | Network | Keys |
