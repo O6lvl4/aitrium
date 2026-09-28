@@ -3,7 +3,7 @@
 # credential broker (almide/porta#42). aitrium itself is the commit being released.
 almide      almide/almide       9d80eb004b82235fda52ecf0f4e5f5a43705a4ed  # v0.65.1-rc3
 porta       almide/porta        d51cccbf991f91b5d03a5f28097a10f881a96ba5
-comide      O6lvl4/comide       a4ac550ee7c08447becaa6c1a569cff4827f4b1f
+comide      O6lvl4/comide       78b1370e25f047d72d96c786714b0f08b75696b1
 golemide    O6lvl4/golemide     d85284cea1ba3455cd0bfb2944510f9864aa0d5b
 gramide-cli O6lvl4/gramide-cli  5f6767970bd9314aba8b24c0b8685e3bb81d1401
 hew         O6lvl4/hew          d96ea3d18f0a6e42973da27c7ffca97644f8d9ab
