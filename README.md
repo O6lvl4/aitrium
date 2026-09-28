@@ -1,5 +1,16 @@
-<p align="center">A world for coding agents to work in: the agent runs its tools in a sandbox the kernel enforces,<br>and the keys stay outside it.</p>
-<p align="center"><a href="README_ja.md">日本語</a></p>
+<h1 align="center">Aitrium</h1>
+
+<p align="center">
+  A world for coding agents to work in: the agent runs its tools in a sandbox the kernel enforces,<br>
+  and the keys stay outside it.
+</p>
+
+<p align="center">
+  <a href="README.md"><img alt="English" src="https://img.shields.io/badge/English-24292f?style=flat-square"></a>
+  <a href="README.ja.md"><img alt="日本語" src="https://img.shields.io/badge/%E6%97%A5%E6%9C%AC%E8%AA%9E-d0d7de?style=flat-square"></a>
+</p>
+
+---
 
 > In a Roman house you came in through the door, the *porta*, and stood in the atrium: the
 > open hall just inside, where guests were received and the household's work went on under
