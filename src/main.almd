@@ -15,8 +15,8 @@ import self.policy
 let USAGE = """
 onogoro [comide's arguments]      comide, with every tool's command confined by porta
 
-  ONOGORO_COMIDE   the comide binary (default: comide on PATH)
-  ONOGORO_PORTA    the porta binary (default: porta on PATH)
+  ONOGORO_COMIDE   the comide binary (default: comide beside onogoro, else on PATH)
+  ONOGORO_PORTA    the porta binary (default: porta beside onogoro, else on PATH)
   ONOGORO_NET      open (default) or none: the network for commands and golemide
   ONOGORO_KEYS     the variables golemide is given for its own model calls, comma
                    separated (default: every model key that is set)
@@ -46,9 +46,12 @@ effect fn main() -> Unit = {
 // ---- the supervisor ---------------------------------------------------------------------
 
 effect fn supervisor(args: List[String]) -> Result[Int, String] = {
+  let me = found(list.first(args) ?? "onogoro")!
+  // A release puts comide, golemide, porta and the rest beside onogoro: those come first,
+  // for the supervisor and for every worker, which get this PATH.
+  env.set("PATH", home_of(me)! + ":" + (env.get("PATH") ?? "/usr/bin:/bin"))
   let comide = found(env.get("ONOGORO_COMIDE") ?? "comide")!
   let porta = found(env.get("ONOGORO_PORTA") ?? "porta")!
-  let me = found(list.first(args) ?? "onogoro")!
   let root = absolute(option_after(args, "--root") ?? ".")!
   broker_ready(porta)!
   let scratch = (string.strip_suffix(env.temp_dir(), "/") ?? env.temp_dir()) + "/onogoro-" + int.to_string(process.pid())
@@ -112,10 +115,15 @@ effect fn claude_bridge(me: String, model: String, scratch: String) -> Result[Br
   }
 }
 
+// The directory onogoro really lives in, through any symlink (~/.local/bin/onogoro).
+effect fn home_of(me: String) -> String = {
+  let real = string.trim(process.exec("realpath", [me]) ?? me)
+  match string.last_index_of(real, "/") { some(i) => string.slice(real, 0, i), none => "." }
+}
+
 // bridge/claude_bridge.py beside this binary's real path, or ONOGORO_BRIDGE.
 effect fn bridge_script(me: String) -> Result[String, String] = {
-  let real = string.trim(process.exec("realpath", [me]) ?? me)
-  let beside = (string.strip_suffix(real, "/onogoro") ?? real) + "/bridge/claude_bridge.py"
+  let beside = home_of(me)! + "/bridge/claude_bridge.py"
   let script = env.get("ONOGORO_BRIDGE") ?? beside
   if fs.exists(script) then ok(script) else err("onogoro: the Claude bridge is not at " + script + " (ONOGORO_BRIDGE)")
 }
