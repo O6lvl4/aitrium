@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Builds onogoro with everything it runs, for this machine, as one archive:
+# Builds aitrium with everything it runs, for this machine, as one archive:
 #
-#   OUT/onogoro-TARGET.tar.gz      onogoro-TARGET/{onogoro, comide, golemide, porta,
+#   OUT/aitrium-TARGET.tar.gz      aitrium-TARGET/{aitrium, comide, golemide, porta,
 #                                  gramide, hew, ctxgate, bridge/claude_bridge.py, PARTS}
-#   OUT/onogoro-TARGET.tar.gz.sha256
+#   OUT/aitrium-TARGET.tar.gz.sha256
 #
 # TARGET is darwin-arm64, linux-x86_64, … The parts are built at the commits dist/PARTS
-# names, onogoro at this checkout's. On Linux, run it on the oldest glibc the archive
+# names, aitrium at this checkout's. On Linux, run it on the oldest glibc the archive
 # should start on (scripts/package-linux.sh does, in Debian bullseye: glibc 2.31).
 #
 #   scripts/package.sh [OUT]            (default OUT: dist/out)
@@ -47,7 +47,7 @@ if [ -z "${ALMIDE:-}" ]; then
 fi
 "$ALMIDE" --version
 
-stage="$WORK/onogoro-$TARGET"
+stage="$WORK/aitrium-$TARGET"
 mkdir -p "$stage/bridge"
 for part in porta:porta comide:comide golemide:golemide gramide-cli:gramide hew:hew ctxgate:ctxgate; do
   name="${part%%:*}" bin="${part##*:}"
@@ -55,20 +55,20 @@ for part in porta:porta comide:comide golemide:golemide gramide-cli:gramide hew:
   fetch "$name"
   build "$WORK/src/$name" "$stage/$bin"
 done
-echo "== onogoro $(git -C "$ROOT" rev-parse HEAD)"
-build "$ROOT" "$stage/onogoro"
+echo "== aitrium $(git -C "$ROOT" rev-parse HEAD)"
+build "$ROOT" "$stage/aitrium"
 cp "$ROOT/bridge/claude_bridge.py" "$stage/bridge/"
 cp "$ROOT/README.md" "$ROOT/LICENSE-MIT" "$ROOT/LICENSE-APACHE" "$stage/"
-{ grep -v '^#' "$ROOT/dist/PARTS" | awk 'NF { print $1, $2, $3 }'; echo "onogoro O6lvl4/onogoro $(git -C "$ROOT" rev-parse HEAD)"; } > "$stage/PARTS"
+{ grep -v '^#' "$ROOT/dist/PARTS" | awk 'NF { print $1, $2, $3 }'; echo "aitrium O6lvl4/aitrium $(git -C "$ROOT" rev-parse HEAD)"; } > "$stage/PARTS"
 
 "$stage/porta" run --help | grep -q -- --credential \
-  || { echo "porta has no --credential: onogoro's broker needs it (almide/porta#42)" >&2; exit 1; }
+  || { echo "porta has no --credential: aitrium's broker needs it (almide/porta#42)" >&2; exit 1; }
 if [ "$os" = linux ]; then
   ! ldd "$stage"/* 2>/dev/null | grep -q 'libssl' || { echo "a binary links libssl" >&2; exit 1; }
-  echo "needs glibc $(objdump -T "$stage"/onogoro "$stage"/comide "$stage"/golemide "$stage"/porta "$stage"/gramide "$stage"/hew "$stage"/ctxgate \
+  echo "needs glibc $(objdump -T "$stage"/aitrium "$stage"/comide "$stage"/golemide "$stage"/porta "$stage"/gramide "$stage"/hew "$stage"/ctxgate \
     | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -1)"
 fi
 
-tar -C "$WORK" -czf "$OUT/onogoro-$TARGET.tar.gz" "onogoro-$TARGET"
-( cd "$OUT" && { command -v sha256sum > /dev/null && sha256sum "onogoro-$TARGET.tar.gz" || shasum -a 256 "onogoro-$TARGET.tar.gz"; } > "onogoro-$TARGET.tar.gz.sha256" )
-ls -l "$OUT/onogoro-$TARGET.tar.gz"
+tar -C "$WORK" -czf "$OUT/aitrium-$TARGET.tar.gz" "aitrium-$TARGET"
+( cd "$OUT" && { command -v sha256sum > /dev/null && sha256sum "aitrium-$TARGET.tar.gz" || shasum -a 256 "aitrium-$TARGET.tar.gz"; } > "aitrium-$TARGET.tar.gz.sha256" )
+ls -l "$OUT/aitrium-$TARGET.tar.gz"

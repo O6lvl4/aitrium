@@ -8,6 +8,6 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT="$(mkdir -p "${1:-$ROOT/dist/out}" && cd "${1:-$ROOT/dist/out}" && pwd)"
 docker run --rm ${PLATFORM:+--platform "$PLATFORM"} \
-  -v "$ROOT:/onogoro:ro" -v "$OUT:/out" rust:1-bullseye \
-  bash -c 'git config --global --add safe.directory "*" && cp -r /onogoro /tmp/onogoro \
-    && /tmp/onogoro/scripts/package.sh /out && chown -R '"$(id -u):$(id -g)"' /out'
+  -v "$ROOT:/aitrium:ro" -v "$OUT:/out" rust:1-bullseye \
+  bash -c 'git config --global --add safe.directory "*" && cp -r /aitrium /tmp/aitrium \
+    && /tmp/aitrium/scripts/package.sh /out && chown -R '"$(id -u):$(id -g)"' /out'

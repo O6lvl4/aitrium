@@ -4,13 +4,13 @@
 // `porta run`, and this is where the grants for it are decided.
 //
 // No key goes into a worker except to `solve`: golemide calls the model itself. With the
-// broker (ONOGORO_CREDENTIALS=broker, porta with --credential, almide/porta#37) not even
+// broker (AITRIUM_CREDENTIALS=broker, porta with --credential, almide/porta#37) not even
 // that one: golemide is handed a placeholder, and porta's proxy puts the real key on its
 // requests to the model's host alone.
 
 // Where the run is: the project, a scratch directory of this session's own, the files
 // the keys are kept in (closed to reads), and whether porta runs as root (a container).
-// `writable` is more a command and golemide may write, from ONOGORO_WRITABLE. On a laptop
+// `writable` is more a command and golemide may write, from AITRIUM_WRITABLE. On a laptop
 // it is empty: a package goes into the project's own environment. In a container that is
 // thrown away after the task it is where the system's packages go (/usr, /var, /etc),
 // because there the files are not what needs keeping safe; the keys and the network are.

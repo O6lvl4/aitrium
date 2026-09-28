@@ -1,6 +1,6 @@
-# What a release of onogoro is built from: NAME REPOSITORY COMMIT.
+# What a release of aitrium is built from: NAME REPOSITORY COMMIT.
 # almide is the compiler for all the rest; porta is from develop until it releases the
-# credential broker (almide/porta#42). onogoro itself is the commit being released.
+# credential broker (almide/porta#42). aitrium itself is the commit being released.
 almide      almide/almide       9d80eb004b82235fda52ecf0f4e5f5a43705a4ed  # v0.65.1-rc3
 porta       almide/porta        d51cccbf991f91b5d03a5f28097a10f881a96ba5
 comide      O6lvl4/comide       a4ac550ee7c08447becaa6c1a569cff4827f4b1f

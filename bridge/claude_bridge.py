@@ -2,7 +2,7 @@
 
 The supervisor's side of a model call from inside the sandbox. golemide, confined by
 porta, cannot run `claude` itself: porta closes the Keychain its login is kept in, which
-is the point. onogoro starts this bridge on 127.0.0.1 with a token for the session, and
+is the point. aitrium starts this bridge on 127.0.0.1 with a token for the session, and
 golemide reaches it through almai's NAME/MODEL route as `claudecli/MODEL`, holding only
 the URL and the token:
 

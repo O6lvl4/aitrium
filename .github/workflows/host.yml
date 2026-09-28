@@ -27,7 +27,7 @@ jobs:
           persist-credentials: false
       - name: Install
         env:
-          ONOGORO_VERSION: ${{ inputs.version }}
+          AITRIUM_VERSION: ${{ inputs.version }}
         run: sh install.sh && echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: The host
         run: |
