@@ -10,8 +10,10 @@ onogoro は、エージェントのためにその最初の島を作る。どこ
 働き、鍵は島に持ち込まれない。
 
 **状態：[計画](docs/design.md) のフェーズ 1。** 今ある道具で線を引いた段階。comide が
-実行するコマンドはすべて porta を通り、鍵は中に入らない。例外は golemide で、まだ自分で
-モデルを呼ぶため鍵を名前で渡している（almide/porta#37 で解消する）。
+実行するコマンドはすべて porta を通り、鍵は中に入らない。例外は golemide で、自分で
+モデルを呼ぶため鍵を名前で渡している。`ONOGORO_CREDENTIALS=broker` にすると、golemide にも
+偽の値しか渡さない（porta の鍵の受け渡し、almide/porta#37）。porta と Almide の必要な
+修正がリリースされるまでは、明示したときだけ使う。
 
 ```sh
 onogoro                       # comide の会話。道具のコマンドはすべて縛られる

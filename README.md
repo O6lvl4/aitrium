@@ -11,7 +11,9 @@ The agent works on the island. The keys never land there.
 
 **Status: phase 1 of [the plan](docs/design.md).** The line is drawn with the binaries
 that exist: every command comide runs goes through porta, and no key goes in with it
-except to golemide, which still calls the model itself (almide/porta#37 closes that).
+except to golemide, which calls the model itself. `ONOGORO_CREDENTIALS=broker` closes that
+too, handing golemide placeholders only (porta's credential broker, almide/porta#37); it
+is opt-in until porta and Almide release what it needs.
 
 ```sh
 onogoro                       # comide's conversation, every tool's command confined
