@@ -67,7 +67,7 @@ cp "$ROOT/README.md" "$ROOT/LICENSE-MIT" "$ROOT/LICENSE-APACHE" "$stage/"
   || { echo "porta has no --credential: aitrium's broker needs it (almide/porta#42)" >&2; exit 1; }
 if [ "$os" = linux ]; then
   for b in aitrium comide golemide porta gramide hew ctxgate; do
-    file -b "$stage/$b" | grep -q 'statically linked' || { echo "$b is not static: $(file -b "$stage/$b")" >&2; exit 1; }
+    file -b "$stage/$b" | grep -Eq 'statically linked|static-pie linked' || { echo "$b is not static: $(file -b "$stage/$b")" >&2; exit 1; }
   done
   echo "all static"
 fi
