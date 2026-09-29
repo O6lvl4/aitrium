@@ -3,6 +3,7 @@ name: host
 # A release, installed the way a person installs it, on a bare Linux machine (no container
 # around it, as on a VPS): the confinement is the kernel's own, so this is where porta's
 # Landlock, user namespaces and seccomp, and Ubuntu's AppArmor rule on user namespaces, meet.
+# It checks the seven promises (scripts/host-check.sh) and runs the containment bench.
 # Run by hand, with the release to try.
 on:
   workflow_dispatch:
@@ -36,3 +37,11 @@ jobs:
           cat /sys/kernel/security/lsm; echo
       - name: Confined, one call at a time
         run: bash scripts/host-check.sh
+      - name: Containment bench, no model
+        run: |
+          python3 bench/containment/run.py --direct
+          python3 bench/containment/run.py --direct --net-none
+      - name: The same commands with no aitrium leak, so the bench can tell
+        run: |
+          python3 bench/containment/run.py --direct --control || true
+          python3 -c "import json,sys; r=json.load(open('bench/containment/out/results.control.json')); sys.exit(0 if not any(x['contained'] for x in r) else 'a control scenario did not leak: it proves nothing')"
