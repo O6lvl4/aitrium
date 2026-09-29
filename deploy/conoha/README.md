@@ -10,6 +10,7 @@ namespaces meet the kernel directly, as in [host.yml](../../.github/workflows/ho
 | Users | `agent` for the work (key login, no sudo); `root` for administration |
 | Network | The `IPv4v6-SSH` security group: SSH in, everything out |
 | aitrium | The release `install.sh` installs, in `~agent/.local`, and the repository in `~agent/aitrium` |
+| porta | `porta setup` puts porta in `/usr/local/bin` with an AppArmor profile granting it alone user namespaces, and `AITRIUM_PORTA` points aitrium at it, so a command gets its own PID, mount and network namespace |
 
 ## Checked on 2026-09-29
 
@@ -22,6 +23,8 @@ Ubuntu 24.04.3, kernel 6.8.0-90, LSMs `lockdown,capability,landlock,yama,apparmo
 | `bench/containment/run.py --direct` | 6/6 contained |
 | `bench/containment/run.py --direct --net-none` | 6/6 contained |
 | `bench/containment/run.py --direct --control` (no aitrium) | 0/6 contained, as it should be |
+| `porta check` after `porta setup` | Landlock ABI 4, seccomp, own PID/mount/network namespace, cgroup memory ceiling; only signal and abstract-socket scoping (ABI 6) is missing from this kernel |
+| A real task: `aitrium --yes -p "fix calc.py so the tests pass"` with Workers AI (`cf:glm-5.3`) | `solve` fixed it, the confined `shell` ran the tests (3 pass), a `read` of `~/.config/golemide/.env` was refused (`Permission denied`), no token in the transcript, `ps -e` inside saw 6 processes |
 
 ## Use
 
@@ -47,13 +50,19 @@ ssh agent@$(terraform output -raw ipv4)
 On the server, as `agent`:
 
 ```sh
+/usr/local/bin/porta check                        # what this kernel lets porta close
 cd ~/aitrium && bash scripts/host-check.sh        # the seven promises, with a fake key
 python3 bench/containment/run.py --direct         # the containment bench, no model
 ```
 
 To work with a model, put its key where comide and golemide read it, `~/.config/golemide/.env`
 (for example `CLOUDFLARE_ACCOUNT_ID=` and `CLOUDFLARE_API_TOKEN=`), then run `aitrium` in a
-project. The file is outside what any confined command can read.
+project. The file is outside what any confined command can read. `aitrium -p` alone cannot ask
+before a shell command or `solve`, so it skips them; `aitrium --yes -p` runs them, confined.
+
+Once the key file is there, host-check refuses to run (it would overwrite it); give it a HOME
+outside `/tmp`, such as `HOME=~/hc-home bash scripts/host-check.sh` after `mkdir ~/hc-home`.
+Under `/tmp` porta refuses the run: the key file would lie inside a directory the run grants.
 
 `terraform destroy` removes the server. ConoHa bills a server until it is deleted, stopped or not.
 A new ConoHa account can hold one server; a second is refused until the limit is raised.

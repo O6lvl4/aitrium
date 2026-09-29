@@ -21,6 +21,12 @@ runcmd:
   - [sh, -c, "fallocate -l ${swap_gb}G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile && echo '/swapfile none swap sw 0 0' >> /etc/fstab"]
 %{ endif ~}
   - [su, -, agent, -c, "curl -fsSL https://raw.githubusercontent.com/O6lvl4/aitrium/main/install.sh | AITRIUM_VERSION=${aitrium_version} sh"]
+  # Ubuntu's AppArmor (kernel.apparmor_restrict_unprivileged_userns=1) gives an unprivileged user
+  # namespace no right to mount, so porta would run without its own PID and mount namespace and
+  # commands would see the host's processes. porta setup copies porta to /usr/local/bin and grants
+  # that path alone user namespaces; aitrium is pointed at it.
+  - [sh, -c, "yes | /home/agent/.local/share/aitrium/porta setup"]
+  - [su, -, agent, -c, "echo 'export AITRIUM_PORTA=/usr/local/bin/porta' >> ~/.profile"]
   # The repository, for scripts/host-check.sh and bench/containment.
   - [su, -, agent, -c, "git clone -q https://github.com/O6lvl4/aitrium.git ~/aitrium"]
   - [sh, -c, "echo aitrium-ready > /var/lib/aitrium-ready"]
