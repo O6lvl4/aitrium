@@ -1,0 +1,52 @@
+name: aitrium-conoha
+region: ap-northeast-1
+nodes:
+  - id: developer
+    type: entry
+    traffic:
+      users:
+        count: 1
+        actions: 20
+        per: day
+      hours: 9-18
+      days: weekdays
+    note: One person handing the agent 20 tasks a working day
+  - id: host
+    type: conohavps_instance
+    address: conohavps_instance.host
+    attributes:
+      flavor_name: g2l-t-c3m2
+  - id: boot
+    type: conohavps_volume
+    address: conohavps_volume.boot
+    attributes:
+      size: 100
+      volume_type: c3j1-ds02-boot
+  - id: comide-model
+    type: workers_ai_model
+    assumptions:
+      cacheReadShare: 0.6
+      inputTokensPerCall: 2700
+      model: glm-5.3
+      outputTokensPerCall: 60
+    note: comide's conversation (cf:glm-5.3). Per call, from three runs on this server on 2026-09-29 (11.7k-14.1k input and 192-324 output tokens over 4-5 steps a task, 55-65% of the input cached)
+  - id: golemide-model
+    type: workers_ai_model
+    assumptions:
+      cacheReadShare: 0
+      inputTokensPerCall: 4000
+      model: glm-5.3-flash
+      outputTokensPerCall: 800
+    note: 'golemide''s solve (cf:glm-5.3-flash), once a task in those runs; it escalates to glm-5.3 after repeated failures, which this does not count. The tokens are an estimate: comide''s transcript does not record golemide''s own calls'
+  - id: workers-paid
+    type: cloudflare_workers_paid_plan
+    note: GLM 5.3 needs the Workers Paid plan; one per Cloudflare account, shared with anything else on it
+edges:
+  - from: developer
+    to: host
+  - from: host
+    to: comide-model
+    perUnit: 4.5
+  - from: host
+    to: golemide-model
+    perUnit: 1

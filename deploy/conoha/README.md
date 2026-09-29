@@ -66,3 +66,24 @@ Under `/tmp` porta refuses the run: the key file would lie inside a directory th
 
 `terraform destroy` removes the server. ConoHa bills a server until it is deleted, stopped or not.
 A new ConoHa account can hold one server; a second is refused until the limit is raised.
+
+## Reading it with archgopher
+
+[aitrium.scouter.yaml](aitrium.scouter.yaml) is this setup as an
+[archgopher](https://github.com/O6lvl4/archgopher) declaration. The server and its boot volume
+come from this directory's Terraform; the rest is written by hand, because Terraform does not
+know it: the person handing the agent work (20 tasks a working day), the Workers AI models
+comide (`glm-5.3`, 4.5 calls a task) and golemide (`glm-5.3-flash`, once a task) call, and the
+Workers Paid plan GLM 5.3 needs. The tokens per call are from three runs on this server; each
+node's `note` says where its numbers come from.
+
+After a change to the Terraform, regenerate its part without losing the hand-written one:
+
+```sh
+archgopher tf . -merge aitrium.scouter.yaml -o aitrium.scouter.yaml
+archgopher scout aitrium.scouter.yaml
+```
+
+At that load it reads $21.46 a month: the server $11.73, Workers Paid $5.00, comide's model
+$4.30 and golemide's $0.43.
+
