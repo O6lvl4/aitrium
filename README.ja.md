@@ -36,6 +36,17 @@ ctxgate を、[dist/PARTS](dist/PARTS) のコミットでまとめてビルド�
 comide や porta はそのまま残る。対応は Apple silicon の macOS と、x86_64 か aarch64 の
 Linux（静的リンクの musl 版なので、Alpine も含めてディストリビューションを選ばない）。鍵は comide と golemide が読む場所（`~/.config/golemide/.env` か環境変数）に置く。
 
+**Ubuntu 24.04 以降では**、AppArmor が権限の無い user namespace にマウントを許さない
+（`kernel.apparmor_restrict_unprivileged_userns = 1`）。そのため porta は、コマンドごとに
+プロセスとマウントの名前空間を分けられない。下の約束は守られるが、コマンドからホストの
+プロセスが見える。一度だけ root で、porta にだけ user namespace を許し、aitrium にその porta を使わせる。
+
+```sh
+sudo ~/.local/share/aitrium/porta setup    # porta を /usr/local/bin に置き、AppArmor のプロファイルを入れる
+export AITRIUM_PORTA=/usr/local/bin/porta   # ~/.profile などに
+porta check                                 # このカーネルで porta が使えるもの
+```
+
 ```sh
 aitrium                       # comide の会話。道具のコマンドはすべて縛られる
 aitrium -p "fix the tests"    # 1 回だけの依頼。comide の引数はそのまま使える
