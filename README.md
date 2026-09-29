@@ -37,6 +37,18 @@ porta you already have stays as it is. For macOS on Apple silicon, and any Linux
 or aarch64: the Linux binaries are static (musl), Alpine included. Keys go where comide and golemide read them
 (`~/.config/golemide/.env`, or the environment).
 
+**On Ubuntu 24.04 and later**, AppArmor gives an unprivileged user namespace no right to
+mount (`kernel.apparmor_restrict_unprivileged_userns = 1`), so porta runs each command
+without its own process and mount namespace: the promises below still hold, but a command
+can see the host's processes. Once, with root, let porta alone have user namespaces and
+point aitrium at that copy:
+
+```sh
+sudo ~/.local/share/aitrium/porta setup    # porta in /usr/local/bin, with an AppArmor profile for it
+export AITRIUM_PORTA=/usr/local/bin/porta   # e.g. in ~/.profile
+porta check                                 # what this kernel gives porta
+```
+
 ```sh
 aitrium                       # comide's conversation, every tool's command confined
 aitrium -p "fix the tests"    # one request; any of comide's arguments work
