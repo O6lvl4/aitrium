@@ -33,8 +33,8 @@ curl -fsSL https://raw.githubusercontent.com/O6lvl4/aitrium/main/install.sh | sh
 A release carries everything aitrium runs, built together at the commits
 [dist/PARTS](dist/PARTS) names: comide, golemide, porta, gramide, hew and ctxgate. It
 unpacks into `~/.local/share/aitrium` and links `~/.local/bin/aitrium`, so a comide or
-porta you already have stays as it is. For macOS on Apple silicon, and Linux on x86_64 and
-aarch64 with glibc 2.31 or newer. Keys go where comide and golemide read them
+porta you already have stays as it is. For macOS on Apple silicon, and any Linux on x86_64
+or aarch64: the Linux binaries are static (musl), Alpine included. Keys go where comide and golemide read them
 (`~/.config/golemide/.env`, or the environment).
 
 ```sh

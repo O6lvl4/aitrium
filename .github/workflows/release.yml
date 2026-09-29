@@ -17,9 +17,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Linux on Debian bullseye (glibc 2.31), so the archive starts on every newer libc.
-          - { target: linux-x86_64, runner: ubuntu-24.04, container: 'rust:1-bullseye' }
-          - { target: linux-aarch64, runner: ubuntu-24.04-arm, container: 'rust:1-bullseye' }
+          # Linux binaries are static (musl): the archive starts on any Linux of its arch.
+          - { target: linux-x86_64, runner: ubuntu-24.04, container: 'rust:1-bookworm' }
+          - { target: linux-aarch64, runner: ubuntu-24.04-arm, container: 'rust:1-bookworm' }
           - { target: darwin-arm64, runner: macos-15, container: '' }
     runs-on: ${{ matrix.runner }}
     container: ${{ matrix.container }}
@@ -28,6 +28,10 @@ jobs:
         with:
           persist-credentials: false
       - run: git config --global --add safe.directory '*'
+      - if: matrix.container != ''
+        run: |
+          apt-get -qq update && apt-get -qq install -y musl-tools file
+          rustup target add "$(uname -m)-unknown-linux-musl"
       - run: scripts/package.sh dist/out
       - name: Starts on its own
         run: |
