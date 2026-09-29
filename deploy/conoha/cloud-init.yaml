@@ -1,0 +1,26 @@
+#cloud-config
+# The agent works as "agent", a user without sudo: aitrium confines each command the model
+# asks for, and nothing the agent runs should be able to widen that from the host.
+users:
+  - name: agent
+    shell: /bin/bash
+    lock_passwd: true
+    ssh_authorized_keys:
+      - ${ssh_public_key}
+ssh_pwauth: false
+
+package_update: true
+packages:
+  - git
+  - curl
+  - ca-certificates
+  - python3 # bridge/claude_bridge.py and the containment bench
+
+runcmd:
+%{ if swap_gb > 0 ~}
+  - [sh, -c, "fallocate -l ${swap_gb}G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile && echo '/swapfile none swap sw 0 0' >> /etc/fstab"]
+%{ endif ~}
+  - [su, -, agent, -c, "curl -fsSL https://raw.githubusercontent.com/O6lvl4/aitrium/main/install.sh | AITRIUM_VERSION=${aitrium_version} sh"]
+  # The repository, for scripts/host-check.sh and bench/containment.
+  - [su, -, agent, -c, "git clone -q https://github.com/O6lvl4/aitrium.git ~/aitrium"]
+  - [sh, -c, "echo aitrium-ready > /var/lib/aitrium-ready"]
