@@ -6,8 +6,9 @@
 #   OUT/aitrium-TARGET.tar.gz.sha256
 #
 # TARGET is darwin-arm64, linux-x86_64, … The parts are built at the commits dist/PARTS
-# names, aitrium at this checkout's. On Linux, run it on the oldest glibc the archive
-# should start on (scripts/package-linux.sh does, in Debian bullseye: glibc 2.31).
+# names, aitrium at this checkout's. On Linux every binary is static (musl), so the archive
+# starts on any Linux of its architecture, Alpine included; that needs the musl target and
+# musl-gcc (scripts/package-linux.sh has both).
 #
 #   scripts/package.sh [OUT]            (default OUT: dist/out)
 #   ALMIDE=/path/to/almide scripts/package.sh   build with this compiler, not the pinned one
@@ -19,6 +20,7 @@ os="$(uname -s | tr '[:upper:]' '[:lower:]')"
 arch="$(uname -m)"; [ "$os" = darwin ] && [ "$arch" = aarch64 ] && arch=arm64
 TARGET="$os-$arch"
 WORK="$(mktemp -d)"
+MUSL=""; [ "$os" = linux ] && MUSL=1
 trap 'rm -rf "$WORK"' EXIT
 
 ref_of() { awk -v n="$1" '$1 == n { print $3 }' "$ROOT/dist/PARTS"; }
@@ -34,7 +36,7 @@ fetch() {
 # Built quietly; the log's tail when it fails.
 build() {
   local dir="$1" out="$2"
-  ( cd "$dir" && "$ALMIDE" build --release src/main.almd -o "$out" ) > "$WORK/build.log" 2>&1 \
+  ( cd "$dir" && "$ALMIDE" build --release ${MUSL:+--target linux-musl} src/main.almd -o "$out" ) > "$WORK/build.log" 2>&1 \
     || { echo "== building $out in $dir failed" >&2; tail -30 "$WORK/build.log" >&2; exit 1; }
 }
 
@@ -64,9 +66,10 @@ cp "$ROOT/README.md" "$ROOT/LICENSE-MIT" "$ROOT/LICENSE-APACHE" "$stage/"
 "$stage/porta" run --help | grep -q -- --credential \
   || { echo "porta has no --credential: aitrium's broker needs it (almide/porta#42)" >&2; exit 1; }
 if [ "$os" = linux ]; then
-  ! ldd "$stage"/* 2>/dev/null | grep -q 'libssl' || { echo "a binary links libssl" >&2; exit 1; }
-  echo "needs glibc $(objdump -T "$stage"/aitrium "$stage"/comide "$stage"/golemide "$stage"/porta "$stage"/gramide "$stage"/hew "$stage"/ctxgate \
-    | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -1)"
+  for b in aitrium comide golemide porta gramide hew ctxgate; do
+    file -b "$stage/$b" | grep -Eq 'statically linked|static-pie linked' || { echo "$b is not static: $(file -b "$stage/$b")" >&2; exit 1; }
+  done
+  echo "all static"
 fi
 
 tar -C "$WORK" -czf "$OUT/aitrium-$TARGET.tar.gz" "aitrium-$TARGET"

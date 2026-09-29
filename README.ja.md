@@ -33,8 +33,8 @@ curl -fsSL https://raw.githubusercontent.com/O6lvl4/aitrium/main/install.sh | sh
 リリースには aitrium が動かすもの一式が入っている。comide、golemide、porta、gramide、hew、
 ctxgate を、[dist/PARTS](dist/PARTS) のコミットでまとめてビルドしたもの。
 `~/.local/share/aitrium` に展開し、`~/.local/bin/aitrium` からリンクするだけなので、手元の
-comide や porta はそのまま残る。対応は Apple silicon の macOS と、glibc 2.31 以降の Linux
-（x86_64、aarch64）。鍵は comide と golemide が読む場所（`~/.config/golemide/.env` か環境変数）に置く。
+comide や porta はそのまま残る。対応は Apple silicon の macOS と、x86_64 か aarch64 の
+Linux（静的リンクの musl 版なので、Alpine も含めてディストリビューションを選ばない）。鍵は comide と golemide が読む場所（`~/.config/golemide/.env` か環境変数）に置く。
 
 ```sh
 aitrium                       # comide の会話。道具のコマンドはすべて縛られる
