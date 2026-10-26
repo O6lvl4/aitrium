@@ -66,12 +66,12 @@ fn network(w: World, kind: String) -> List[String] =
 // placeholder bound to its host, and the rest by name.
 fn passed(w: World, kind: String) -> List[String] =
   if kind != "solve" or list.is_empty(w.keys) then []
-  else if not w.broker then ["--env-pass", string.join(w.keys, ",")]
+  else if not w.broker then ["--env-pass", list.join(w.keys, ",")]
   else {
     let bound = list.filter(w.keys, (k) => option.is_some(host_of(k)))
     let named = list.filter(w.keys, (k) => option.is_none(host_of(k)))
     list.flat_map(bound, (k) => ["--credential", k + "=" + (host_of(k) ?? "")])
-      + (if list.is_empty(named) then [] else ["--env-pass", string.join(named, ",")])
+      + (if list.is_empty(named) then [] else ["--env-pass", list.join(named, ",")])
   }
 
 // `porta run PROG GRANTS -- ARGS`: the whole invocation for one call.
