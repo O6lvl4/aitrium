@@ -49,7 +49,7 @@ effect fn supervisor(args: List[String]) -> Result[Int, String] = {
   let me = found(list.first(args) ?? "aitrium")!
   // A release puts comide, golemide, porta and the rest beside aitrium: those come first,
   // for the supervisor and for every worker, which get this PATH.
-  env.set("PATH", home_of(me)! + ":" + (env.get("PATH") ?? "/usr/bin:/bin"))
+  env.set("PATH", home_of(me)! + ":" + (env.get("PATH") ?? "/usr/bin:/bin"))!
   let comide = found(env.get("AITRIUM_COMIDE") ?? "comide")!
   let porta = found(env.get("AITRIUM_PORTA") ?? "porta")!
   let root = absolute(option_after(args, "--root") ?? ".")!
@@ -58,11 +58,11 @@ effect fn supervisor(args: List[String]) -> Result[Int, String] = {
   fs.mkdir_p(scratch)!
   // What every worker is told. comide passes its environment to the runner it starts;
   // porta then starts each command from an empty one.
-  env.set("AITRIUM_ROLE", "worker")
-  env.set("AITRIUM_ROOT", root)
-  env.set("AITRIUM_SCRATCH", scratch)
-  env.set("AITRIUM_PORTA_BIN", porta)
-  env.set("COMIDE_RUNNER", me)
+  env.set("AITRIUM_ROLE", "worker")!
+  env.set("AITRIUM_ROOT", root)!
+  env.set("AITRIUM_SCRATCH", scratch)!
+  env.set("AITRIUM_PORTA_BIN", porta)!
+  env.set("COMIDE_RUNNER", me)!
   let bridge = match option.flat_map(option_after(args, "--model"), claude_model) {
     some(model) => some(claude_bridge(me, model, scratch)!),
     none => none,
@@ -107,10 +107,10 @@ effect fn claude_bridge(me: String, model: String, scratch: String) -> Result[Br
       script, port, token, scratch + "/claude-bridge.log"]) ?? "")
     let url = "http://127.0.0.1:" + port + "/v1"
     ready(url + "/models", 50)!
-    env.set("CLAUDECLI_BASE_URL", url)
-    env.set("CLAUDECLI_API_KEY", token)
+    env.set("CLAUDECLI_BASE_URL", url)!
+    env.set("CLAUDECLI_API_KEY", token)!
     // solve follows the conversation onto Claude, unless the person chose its model.
-    if option.is_none(env.get("COMIDE_SOLVE_MODEL")) then env.set("COMIDE_SOLVE_MODEL", "claudecli/" + model)
+    if option.is_none(env.get("COMIDE_SOLVE_MODEL")) then env.set("COMIDE_SOLVE_MODEL", "claudecli/" + model)!
     ok(Bridge { pid: pid, url: url, token: token })
   }
 }
