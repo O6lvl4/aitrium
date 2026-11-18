@@ -161,9 +161,17 @@ effect fn worker(args: List[String]) -> Result[Int, String] = {
   else {
     let w = world()!
     let porta = env.get("AITRIUM_PORTA_BIN") ?? "porta"
+    // Where porta cannot have a user namespace (a container, mostly) it says so on stderr,
+    // three hundred characters, on every call. comide takes a command's stderr as part of
+    // its result, so the model was reading that sentence after every tool call and working
+    // around it (`| grep -v porta`). The supervisor says it once, to the person; here the
+    // sentence is taken out of each call's stderr and everything else is passed on.
+    let errs = w.scratch + "/stderr-" + int.to_string(process.pid())
+    let script = "\"$0\" \"$@\" 2> \"$AITRIUM_ERRS\"; code=$?; grep -v '^porta: this host refuses an unprivileged user namespace' \"$AITRIUM_ERRS\" >&2; rm -f \"$AITRIUM_ERRS\"; exit $code"
+    env.set("AITRIUM_ERRS", errs)!
     // Said as ok(...!): left as the bare call, Almide 0.70 wraps the Result once more
     // and the build fails.
-    ok(process.run(process.ProcessCommand { cmd: porta, args: policy.invocation(w, kind, list.get(args, 2) ?? "", list.drop(args, 3)) })!)
+    ok(process.run(process.ProcessCommand { cmd: "sh", args: ["-c", script, porta] + policy.invocation(w, kind, list.get(args, 2) ?? "", list.drop(args, 3)) })!)
   }
 }
 
