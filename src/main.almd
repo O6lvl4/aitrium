@@ -29,6 +29,9 @@ aitrium [comide's arguments]      comide, with every tool's command confined by 
   AITRIUM_WRITABLE more directories commands and golemide may write, colon separated
                    (default: none). In a throwaway container, /usr:/var:/etc lets
                    pip and apt install as the task expects; not for a laptop.
+  AITRIUM_CLOSED   more files and directories no command may read, colon separated
+                   (default: none): where else keys are kept on this machine. The
+                   files golemide and comide read keys from are closed already.
 
 With --model claude (or claude/MODEL), comide talks to claude -p on this machine's
 login, and golemide reaches the same model through a bridge on 127.0.0.1 that only
@@ -158,7 +161,9 @@ effect fn worker(args: List[String]) -> Result[Int, String] = {
   else {
     let w = world()!
     let porta = env.get("AITRIUM_PORTA_BIN") ?? "porta"
-    process.run(process.ProcessCommand { cmd: porta, args: policy.invocation(w, kind, list.get(args, 2) ?? "", list.drop(args, 3)) })
+    // Said as ok(...!): left as the bare call, Almide 0.70 wraps the Result once more
+    // and the build fails.
+    ok(process.run(process.ProcessCommand { cmd: porta, args: policy.invocation(w, kind, list.get(args, 2) ?? "", list.drop(args, 3)) })!)
   }
 }
 
@@ -172,14 +177,30 @@ effect fn world() -> Result[policy.World, String] = {
   ok(policy.World {
     root: env.get("AITRIUM_ROOT") ?? ".",
     scratch: env.get("AITRIUM_SCRATCH") ?? fs.temp_dir(),
-    // The files golemide and comide read keys from, closed to every command.
-    key_files: list.filter([home + "/.config/golemide/.env", home + "/.config/comide/.env"], (f) => fs.exists(f)),
+    // The files golemide and comide read keys from, closed to every command: under
+    // ~/.config, under XDG_CONFIG_HOME when that is somewhere else, and whatever else
+    // the person says keys are kept in (AITRIUM_CLOSED).
+    key_files: list.filter(closed(home, env.get("XDG_CONFIG_HOME") ?? "", env.get("AITRIUM_CLOSED") ?? ""), (f) => fs.exists(f)),
     keys: keys,
     as_root: uid == "0",
     net: env.get("AITRIUM_NET") ?? "open",
     writable: list.filter(list.map(string.split(env.get("AITRIUM_WRITABLE") ?? "", ":"), string.trim), (d) => d != "" and fs.exists(d)),
     broker: (env.get("AITRIUM_CREDENTIALS") ?? "broker") != "by-name",
   })
+}
+
+// What is closed to reads, before asking which of it exists.
+fn closed(home: String, xdg: String, more: String) -> List[String] = {
+  let configs = list.unique([home + "/.config"] + (if string.trim(xdg) == "" then [] else [string.trim(xdg)]))
+  list.unique(list.flat_map(configs, (c) => [c + "/golemide/.env", c + "/comide/.env"])
+    + list.filter(list.map(string.split(more, ":"), string.trim), (p) => p != ""))
+}
+
+test "the key files are closed where they are read from, and so is what the person adds" {
+  assert_eq(closed("/h", "", ""), ["/h/.config/golemide/.env", "/h/.config/comide/.env"])
+  assert_eq(closed("/h", "/h/.config", ""), ["/h/.config/golemide/.env", "/h/.config/comide/.env"])
+  assert_eq(closed("/h", "/k", " /h/.secrets : /h/.aws/credentials:"),
+    ["/h/.config/golemide/.env", "/h/.config/comide/.env", "/k/golemide/.env", "/k/comide/.env", "/h/.secrets", "/h/.aws/credentials"])
 }
 
 // ---- small things -----------------------------------------------------------------------
