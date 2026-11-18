@@ -67,6 +67,8 @@ to commands; `aitrium --help` says the rest.
 
 Every call also has the files the keys live in (`~/.config/golemide/.env`, …) closed to
 reads, `TMPDIR` set to the scratch dir, and credential stores closed by porta's preset.
+Keys kept anywhere else on the machine are closed by naming the place:
+`AITRIUM_CLOSED=~/.secrets:~/work/.env` (files or directories, colon separated).
 
 What that comes to, checked on each release by [scripts/host-check.sh](scripts/host-check.sh)
 on bare Ubuntu 22.04 and 24.04 (x86_64 and arm64), with a fake key and no model:

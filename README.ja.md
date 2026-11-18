@@ -65,6 +65,8 @@ aitrium は隣にある comide と porta を使う。クローンから動かす
 
 どの呼び出しでも、鍵が置かれたファイル（`~/.config/golemide/.env` など）は読めず、
 `TMPDIR` は作業用のディレクトリになり、資格情報の置き場は porta の既定の方針で閉じられる。
+ほかの場所に鍵を置いているなら、その場所を `AITRIUM_CLOSED=~/.secrets:~/work/.env` のように
+指定すると閉じられる（ファイルでもディレクトリでもよい。`:` で区切る）。
 
 その結果として守られることは次の 7 つ。リリースごとに [scripts/host-check.sh](scripts/host-check.sh)
 で、コンテナを挟まない Ubuntu 22.04 と 24.04（x86_64 と arm64）の上で、偽の鍵を使い、モデルは
